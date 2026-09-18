@@ -19,6 +19,10 @@ on:
         type: string
         default: ""
 
+# Needed for "Publish Release" (creating a GitHub Release with the built exe).
+permissions:
+  contents: write
+
 env:
   # keep identical to upstream .github/workflows/flutter-build.yml of tag 1.4.9
   SCITER_RUST_VERSION: "1.75"
