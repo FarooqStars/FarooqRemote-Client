@@ -56,14 +56,14 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: Export GitHub Actions cache environment variables
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout source code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -85,9 +85,17 @@ jobs:
           path: ./
 
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
-        with:
-          version: ${{ env.LLVM_VERSION }}
+        # Same as KyleMayes/install-llvm-action (which has no Node 24 release yet):
+        # official LLVM Windows installer, silent, then LIBCLANG_PATH/PATH for bindgen.
+        run: |
+          $ver = "${{ env.LLVM_VERSION }}"
+          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-$ver/LLVM-$ver-win64.exe" -OutFile llvm-installer.exe
+          Start-Process -FilePath .\llvm-installer.exe -ArgumentList "/S", "/D=C:\LLVM" -Wait
+          if (-not (Test-Path "C:\LLVM\bin\libclang.dll")) { Write-Error "LLVM install failed"; exit 1 }
+          "LLVM_PATH=C:\LLVM" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LIBCLANG_PATH=C:\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "C:\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          & C:\LLVM\bin\clang.exe --version
 
       - name: Install flutter
         id: flutter
@@ -207,9 +215,14 @@ jobs:
         shell: bash
         run: |
           sed -i '/dpiAware/d' res/manifest.xml
+          # The app calls itself FarooqRemote (src/farooq.rs), and the Windows installer
+          # registers shortcut, service and firewall rule as <dir>\FarooqRemote.exe,
+          # so the main exe must carry that name (upstream does the same for custom clients).
+          mv ./rustdesk/rustdesk.exe ./rustdesk/FarooqRemote.exe
+          ls -l ./rustdesk/FarooqRemote.exe
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/FarooqRemote.exe
           popd
           mkdir -p ./Output
           mv ./target/release/rustdesk-portable-packer.exe ./Output/farooqremote-${{ env.FR_VERSION }}-x86_64.exe
@@ -222,7 +235,7 @@ jobs:
           path: Output
 
       - name: Publish Release
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        uses: softprops/action-gh-release@e598afbe1493e6b1bafb1f389cabb956eab91231 # v3.0.3
         if: ${{ inputs.release-tag != '' }}
         with:
           prerelease: true
