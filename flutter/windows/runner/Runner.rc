@@ -89,7 +89,7 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Mohammad Farooq (farooqmusic.com)" "\0"
+            VALUE "CompanyName", "Mohammad Farooq (farooqmughal.net)" "\0"
             VALUE "FileDescription", "Farooq Remote (based on RustDesk)" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "rustdesk" "\0"

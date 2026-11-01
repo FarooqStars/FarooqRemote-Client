@@ -1,8 +1,8 @@
 # Farooq Remote — client branding notes
 
 Farooq Remote is a build of [RustDesk](https://github.com/rustdesk/rustdesk) (tag 1.4.9)
-developed by **Mohammad Farooq** — <https://www.farooqmusic.com>.
-Downloads and guides for everyone: <https://www.mymandoob.com/farooqremote>.
+developed by **Mohammad Farooq** — <https://www.farooqmughal.net>.
+Downloads and guides for everyone: <https://www.farooqmughal.net/farooqremote>.
 
 Licence: AGPL-3.0, unchanged from upstream (see `LICENCE`). RustDesk copyright
 notices are kept. This repository *is* the source-availability required by the
@@ -13,12 +13,12 @@ by the workflow below.
 
 | File | Change |
 |---|---|
-| `src/farooq.rs` (new) | The single branding point: app name `FarooqRemote`, default ID server / relay / public key, website URLs. |
+| `src/farooq.rs` (new) | The single branding point: app name `FarooqRemote`, default ID server / relay / public key / account (API) server, website URLs. |
 | `src/lib.rs`, `src/common.rs` | `pub mod farooq;` and one call `crate::farooq::apply()` at the top of `load_custom_client()` (runs on desktop and mobile start-up). |
 | `src/lang/ur.rs` (new), `src/lang.rs` | Urdu language added (764 strings). |
 | `src/lang/en.rs` | `powered_by_me` → "Based on RustDesk · developed by Mohammad Farooq". |
 | `flutter/lib/desktop/pages/desktop_setting_page.dart` | About card: developer line, website/privacy links, source URL. |
-| `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/lib/mobile/pages/settings_page.dart` | rustdesk.com links → farooqmusic.com / mymandoob.com. |
+| `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/lib/mobile/pages/settings_page.dart` | rustdesk.com links → farooqmughal.net (1.1.0; before: farooqmusic.com / mymandoob.com). |
 | `flutter/windows/runner/Runner.rc` | Company / product / description / copyright strings. |
 | `flutter/android/app/src/main/AndroidManifest.xml` | App label "Farooq Remote". |
 | `res/*`, `flutter/assets/icon.svg`, `flutter/windows/runner/resources/app_icon.ico`, Android mipmaps, `flutter/macos/Runner/AppIcon.icns`, iOS AppIcon set | Farooq Remote icons. |
@@ -29,8 +29,8 @@ are not triggered (they run on upstream's own tags/schedules).
 
 ## How the server is wired
 
-`src/farooq.rs` writes the ID server, relay and key into `DEFAULT_SETTINGS`, which are
-the *defaults* of **Settings → Network**. So:
+`src/farooq.rs` writes the ID server, relay, key and the account (API) server into
+`DEFAULT_SETTINGS`, which are the *defaults* of **Settings → Network**. So:
 
 * **Use Farooq's server** — install and it is Ready; nothing to type.
 * **Use your own server** — open Settings → Network, put your own ID server / relay /
@@ -43,8 +43,18 @@ The Windows workflow additionally patches the hard fallback constants in the
 ## Building
 
 GitHub → Actions → "Farooq Remote - Windows x64 build" → Run workflow.
-Optional input `release-tag` (e.g. `v1.0.0`) also creates a GitHub Release with
-`farooqremote-1.0.0-x86_64.exe` and `SHA256SUMS.txt`.
+Optional input `release-tag` (e.g. `v1.1.0`) also creates a GitHub Release with
+`farooqremote-1.1.0-x86_64.exe` and `SHA256SUMS.txt`.
+
+## 1.1.0 — accounts (Phase 5, 1 Nov 2026)
+
+* Server name `remote.farooqmughal.net` (the company domain) instead of the raw IP;
+  the same hbbs / hbbr and key, so 1.0.x clients keep working.
+* Account server `https://remote.farooqmughal.net` (lejianwen/rustdesk-api, MIT, on the
+  same VM behind nginx): **Login** with user name + password, a synced address book
+  (with saved passwords and tags) and the device list. Registration is off — only the
+  owner's account.
+* All links → farooqmughal.net (website, download, privacy); source → FarooqStars.
 
 The exe is unsigned: Windows SmartScreen shows "unknown publisher" → *More info* →
 *Run anyway*. The Microsoft Store (MSIX) route is planned to avoid this.

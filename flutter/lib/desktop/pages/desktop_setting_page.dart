@@ -2448,7 +2448,7 @@ class _AboutState extends State<_About> {
                         .marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://www.mymandoob.com/farooqremote/privacy');
+                    launchUrlString('https://www.farooqmughal.net/farooqremote/privacy');
                   },
                   child: Text(
                     translate('Privacy Statement'),
@@ -2456,7 +2456,7 @@ class _AboutState extends State<_About> {
                   ).marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://www.farooqmusic.com');
+                    launchUrlString('https://www.farooqmughal.net');
                   },
                   child: Text(
                     translate('Website'),
@@ -2474,7 +2474,7 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Farooq Remote — developed by Mohammad Farooq\nwww.farooqmusic.com · downloads: www.mymandoob.com\n\nBased on RustDesk. Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license\nSource: github.com/farooqmusicai/FarooqRemote-Client',
+                            'Farooq Remote — developed by Mohammad Farooq\nwww.farooqmughal.net · downloads: www.farooqmughal.net/farooqremote\n\nBased on RustDesk. Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license\nSource: github.com/FarooqStars/FarooqRemote-Client',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(
