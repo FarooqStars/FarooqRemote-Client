@@ -199,6 +199,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     return;
                 }
                 self.handler.update_direct(Some(direct));
+                // Farooq Remote 1.1.6: easy access only on an end-to-end encrypted connection, tied to the other
+                // computer's key as checked through the ID server (taken once in client::handle_hash)
+                self.handler.lc.write().unwrap().fr_easy_pk =
+                    if is_secured { pk.clone() } else { None };
                 if conn_type == ConnType::DEFAULT_CONN || conn_type == ConnType::VIEW_CAMERA {
                     self.handler
                         .set_fingerprint(crate::common::pk_to_fingerprint(pk.unwrap_or_default()));

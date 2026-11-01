@@ -281,7 +281,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remember-wayland-keyboard-choice-tip", "Don't ask again for this remote computer"),
         ("conn-e2ee-unavailable-tip", "Could not verify end-to-end encryption.\nThe remote device may still be setting up. Try again later.\nIf this keeps happening, the server may be untrusted.\nContinue anyway?"),
         ("fr-easy-access-label", "Easy access: my account connects without a password"),
-        ("fr-easy-access-tip", "Your other computers signed in to the same Farooq Remote account connect to this one without its password. Everyone else still needs the password."),
+        ("fr-easy-access-tip", "Your other computers signed in to the same Farooq Remote account connect to this one without its password, as long as this computer also stays signed in to that account. Everyone else still needs the password."),
         ("fr-easy-access-account", "Account"),
         ("fr-easy-access-login-first", "Log in to your account first (Settings → Account), then tick easy access."),
     ].iter().cloned().collect();

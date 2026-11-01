@@ -19,7 +19,8 @@
 
 use hbb_common::{
     config::{keys, Config, LocalConfig, APP_NAME, DEFAULT_SETTINGS},
-    log, timeout,
+    log,
+    tls::TlsType,
 };
 use std::sync::Once;
 
@@ -70,11 +71,26 @@ pub fn token_for_id_server(token: String) -> String {
 /// (`easy_ticket`) and sends it in the end-to-end encrypted login (LoginRequest.fr_ticket, field 99, added to the
 /// protocol at build time). The computer asks the server about it once (`easy_check`) and lets the session in only for
 /// its own stored account and the computer that connected; anything else gets the password question as before.
-/// Server side: FarooqRemote-Server farooqremote/accounts/api/lib/freasy (accounts 2.7-9).
+///
+/// 1.1.6 (security review of 1.1.5, before it was given to anyone):
+///   * both calls use `easy_post`: https only, the server's certificate always checked, no «accept any certificate»
+///     retry and no detour through the ID server, so nobody in between can fake the server's answer or read the token;
+///   * a ticket is asked for only on an end-to-end encrypted connection, once per connection, and it is tied to the
+///     other computer's key as checked through the ID server (`target_pk`); the computer being reached accepts it only
+///     when that key is its own, so a ticket can not be carried to another session;
+///   * the account server gives a ticket only for a computer that is signed in to the same account (accounts 2.7-10);
+///   * settings sent in a heartbeat answer («strategy») are not applied at all (`ACCEPT_SERVER_STRATEGY`).
+/// Server side: FarooqRemote-Server farooqremote/accounts/api/lib/freasy (accounts 2.7-10).
 pub const OPTION_EASY_ACCESS: &str = "fr-easy-access";
 /// The account (user name, lower case) chosen when easy access was ticked.
 pub const OPTION_EASY_OWNER: &str = "fr-easy-owner";
 const EASY_HTTP_TIMEOUT_MS: u64 = 6_000;
+
+/// Farooq Remote 1.1.6: upstream lets the account server change this computer's settings through the heartbeat answer
+/// («strategy», a RustDesk Server Pro feature). The Farooq Remote account server never sends one, and such an answer
+/// could switch off security settings (or easy access's own), so it is ignored. Set to true only for a server that
+/// really sends strategies.
+pub const ACCEPT_SERVER_STRATEGY: bool = false;
 
 /// This computer lets its owner's account in without a password.
 pub fn easy_access_on() -> bool {
@@ -90,27 +106,69 @@ fn easy_api_url(path: &str) -> Option<String> {
     if api.is_empty() || crate::is_public(&api) {
         return None;
     }
+    let api = api.trim_end_matches('/');
+    if !api.to_ascii_lowercase().starts_with("https://") {
+        log::warn!("easy access needs an https account server; it stays off");
+        return None;
+    }
     Some(format!("{}{}", api, path))
 }
 
+/// A strict JSON POST for easy access: https only (see `easy_api_url`), the certificate is always checked (rustls with
+/// the system's roots first, then the system's own TLS — never «accept invalid certificates»), no fallback through the
+/// ID server, one time limit, and only a 2xx answer counts.
+async fn easy_post(
+    url: &str,
+    body: &serde_json::Value,
+    bearer: Option<&str>,
+) -> Option<serde_json::Value> {
+    let body = body.to_string();
+    let limit = std::time::Duration::from_millis(EASY_HTTP_TIMEOUT_MS);
+    for tls in [TlsType::Rustls, TlsType::NativeTls] {
+        let mut req = crate::hbbs_http::create_http_client_async(tls, false)
+            .post(url)
+            .header("Content-Type", "application/json")
+            .timeout(limit)
+            .body(body.clone());
+        if let Some(t) = bearer {
+            req = req.header("Authorization", format!("Bearer {}", t));
+        }
+        match req.send().await {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    log::warn!("easy access: the account server answered {}", resp.status());
+                    return None;
+                }
+                let text = resp.text().await.ok()?;
+                return serde_json::from_str(&text).ok();
+            }
+            Err(e) => {
+                log::warn!("easy access: request failed ({:?}): {}", tls, e);
+                if e.is_timeout() {
+                    return None;
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Controller: a one-time ticket to reach `peer_id` without its password — only when signed in and when that computer
-/// allows easy access (the account server decides); `None` otherwise, and the password is asked as before.
-pub async fn easy_ticket(peer_id: &str) -> Option<String> {
+/// allows easy access and is signed in to the same account (the account server decides); `None` otherwise, and the
+/// password is asked as before. `target_pk` is the other computer's key, checked through the ID server, of this
+/// end-to-end encrypted connection; the ticket is valid only for that key.
+pub async fn easy_ticket(peer_id: &str, target_pk: &[u8]) -> Option<String> {
     let token = LocalConfig::get_option("access_token");
-    if token.is_empty() || peer_id.is_empty() {
+    if token.is_empty() || peer_id.is_empty() || target_pk.len() != 32 {
         return None;
     }
     let url = easy_api_url("/api/fr/easy/ticket")?;
-    let body = serde_json::json!({ "id": peer_id, "from": Config::get_id() }).to_string();
-    let header = format!("Authorization: Bearer {}", token);
-    let res = timeout(
-        EASY_HTTP_TIMEOUT_MS,
-        crate::post_request(url, body, &header),
-    )
-    .await
-    .ok()?
-    .ok()?;
-    let v: serde_json::Value = serde_json::from_str(&res).ok()?;
+    let body = serde_json::json!({
+        "id": peer_id,
+        "from": Config::get_id(),
+        "pk": crate::encode64(target_pk),
+    });
+    let v = easy_post(&url, &body, Some(&token)).await?;
     if v["easy"].as_bool() != Some(true) {
         return None;
     }
@@ -122,34 +180,33 @@ pub async fn easy_ticket(peer_id: &str) -> Option<String> {
     Some(ticket)
 }
 
-/// Computer being reached: is `ticket` from this computer's owner, presented by the computer `from_id`? Asks the account
-/// server once (the ticket is used up either way); any doubt means «no».
+/// Computer being reached: is `ticket` from this computer's owner, presented by the computer `from_id`, for a session
+/// with this computer's own key? Asks the account server once (the ticket is used up either way); any doubt means «no».
 pub async fn easy_check(ticket: &str, from_id: &str) -> bool {
-    if !easy_access_on() || ticket.len() != 64 || from_id.is_empty() {
+    if !easy_access_on()
+        || ticket.len() != 64
+        || !ticket.chars().all(|c| c.is_ascii_hexdigit())
+        || from_id.is_empty()
+    {
         return false;
     }
     let Some(url) = easy_api_url("/api/fr/easy/check") else {
         return false;
     };
     let owner = Config::get_option(OPTION_EASY_OWNER).trim().to_lowercase();
-    let body = serde_json::json!({ "ticket": ticket, "id": Config::get_id() }).to_string();
-    let res = match timeout(EASY_HTTP_TIMEOUT_MS, crate::post_request(url, body, "")).await {
-        Ok(Ok(s)) => s,
-        _ => {
-            log::warn!("easy access: no answer from the account server");
-            return false;
-        }
-    };
-    let v: serde_json::Value = match serde_json::from_str(&res) {
-        Ok(v) => v,
-        Err(_) => return false,
+    let my_pk = crate::encode64(Config::get_key_pair().1);
+    let body = serde_json::json!({ "ticket": ticket, "id": Config::get_id() });
+    let Some(v) = easy_post(&url, &body, None).await else {
+        log::warn!("easy access: no answer from the account server");
+        return false;
     };
     let ok = v["ok"].as_bool() == Some(true)
         && v["user"]
             .as_str()
             .map(|u| u.trim().to_lowercase() == owner)
             .unwrap_or(false)
-        && v["from"].as_str() == Some(from_id);
+        && v["from"].as_str() == Some(from_id)
+        && v["pk"].as_str() == Some(my_pk.as_str());
     log::info!(
         "easy access from {}: {}",
         from_id,

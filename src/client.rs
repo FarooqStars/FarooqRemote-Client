@@ -1770,6 +1770,9 @@ pub struct LoginConfigHandler {
     pub enable_trusted_devices: bool,
     pub record_state: bool,
     pub record_permission: bool,
+    /// Farooq Remote 1.1.6: the other computer's key, checked through the ID server, kept only while this connection is
+    /// end-to-end encrypted (src/client/io_loop.rs); taken once by `handle_hash` for an easy-access ticket.
+    pub fr_easy_pk: Option<Vec<u8>>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -3570,9 +3573,13 @@ pub async fn handle_hash(
     // Farooq Remote 1.1.5: easy access — no saved password: ask the account server for a one-time ticket (only when signed
     // in and the target allows it, see crate::farooq). The target answers with the session, or with «Empty Password»,
     // which brings up the password question as before.
-    if password.is_empty() {
+    // 1.1.6: only on an end-to-end encrypted connection and once per connection (the key is taken), tied to the key of
+    // the computer this connection really reaches.
+    let target_pk = lc.write().unwrap().fr_easy_pk.take();
+    let target_pk = target_pk.filter(|pk| pk.len() == 32 && peer.is_secured());
+    if let (true, Some(target_pk)) = (password.is_empty(), target_pk) {
         let id = lc.read().unwrap().id.clone();
-        if let Some(ticket) = crate::farooq::easy_ticket(&id).await {
+        if let Some(ticket) = crate::farooq::easy_ticket(&id, &target_pk).await {
             let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
             let (os_username, os_password) = if is_terminal {
                 ("".to_owned(), "".to_owned())

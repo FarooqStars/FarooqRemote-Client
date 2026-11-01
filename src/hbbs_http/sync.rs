@@ -263,7 +263,10 @@ async fn start_hbbs_sync_async() {
                             }
                         }
                         if let Some(strategy) = rsp.remove("strategy") {
-                            if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
+                            // Farooq Remote 1.1.6: settings in a heartbeat answer are not applied (see crate::farooq)
+                            if !crate::farooq::ACCEPT_SERVER_STRATEGY {
+                                log::warn!("strategy in the heartbeat answer ignored");
+                            } else if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
                                 log::info!("strategy updated");
                                 handle_config_options(strategy.config_options);
                             }

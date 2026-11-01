@@ -2705,8 +2705,14 @@ impl Connection {
                 }
             } else if !lr.fr_ticket.is_empty() {
                 // Farooq Remote 1.1.5: easy access — the owner's own account (see crate::farooq::easy_check); anything
-                // else gets «Empty Password», so the other side asks for the password as before
+                // else gets «Empty Password», so the other side asks for the password as before.
+                // 1.1.6: counted like a password try (too many wrong tries from one address are stopped the same way)
+                let (failure, res) = self.check_failure(0).await;
+                if !res {
+                    return true;
+                }
                 if crate::farooq::easy_check(&lr.fr_ticket, &lr.my_id).await {
+                    self.update_failure(failure, true, 0);
                     self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::FarooqEasyAccess);
                     if err_msg.is_empty() {
                         #[cfg(target_os = "linux")]
@@ -2719,6 +2725,7 @@ impl Connection {
                         self.send_login_error(err_msg).await;
                     }
                 } else {
+                    self.update_failure(failure, false, 0);
                     self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_EMPTY)
                         .await;
                     self.try_start_cm(lr.my_id, lr.my_name, false);

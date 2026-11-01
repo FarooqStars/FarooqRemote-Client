@@ -27,6 +27,7 @@ by the workflow below.
 | `flutter/assets/logo.png` (new, 1.1.3), `res/farooq-branding/make_banner.py` | The owner's banner (icon + name on teal) at the top of the main window. |
 | `src/client.rs` (one line in `_start_inner`), `src/farooq.rs` | 1.1.4: the account token is not sent to the open-source ID server, so a logged-in app connects (no wait for a key exchange the server never sends). |
 | `src/farooq.rs` (easy_*), `src/client.rs` (`handle_hash`), `src/server/connection.rs` (login), `src/hbbs_http/sync.rs` (heartbeat), `desktop_setting_page.dart`, `src/lang/{en,ur,ar}.rs`, workflow step for `message.proto` | 1.1.5: easy access — the owner's own account connects without a password (see «1.1.5» below). |
+| `src/farooq.rs` (`easy_post`, `ACCEPT_SERVER_STRATEGY`), `src/client.rs` (`fr_easy_pk`), `src/client/io_loop.rs`, `src/server/connection.rs`, `src/hbbs_http/sync.rs`, `src/lang/{en,ur,ar}.rs` | 1.1.6: easy access after a security review — strict https, the ticket tied to the encrypted session, wrong tickets counted, heartbeat «strategy» ignored (see «1.1.6» below). |
 | `.github/workflows/farooqremote-windows.yml` (new) | Windows x64 build (manual trigger). |
 
 Everything else is upstream, byte for byte. Upstream workflows are left in place but
@@ -125,6 +126,29 @@ The exe is unsigned: Windows SmartScreen shows "unknown publisher" → *More inf
   the computer that connected (audit value 9 = easy access); otherwise it answers «Empty Password», so the controller
   asks for the password as before. 2FA, if switched on, is still asked.
 * Server side: FarooqRemote-Server `accounts-2.7-9` (lib/freasy, controller api/farooq_easy.go, ci/easy_test.py).
+* 1.1.5 was a test build only (not given to anyone); use 1.1.6.
+
+## 1.1.6 — easy access, after a security review (1 Nov 2026)
+
+A review of 1.1.5 (before it was given to anyone) found ways around easy access; 1.1.6 closes them:
+
+* **The server's answer can not be faked.** `easy_ticket` / `easy_check` no longer use upstream `post_request`, which
+  retries with «accept any certificate» and can go through the ID server instead. `crate::farooq::easy_post`: https only,
+  the certificate always checked (rustls with the system's roots, then the system's own TLS), no detour, 6 s, only a 2xx
+  answer counts. The account token is never sent without a checked certificate.
+* **A ticket belongs to one encrypted session.** The connection keeps the other computer's key (checked through the ID
+  server) only when it is end-to-end encrypted (`src/client/io_loop.rs` → `LoginConfigHandler.fr_easy_pk`);
+  `handle_hash` takes it once, so a ticket is asked for at most once per connection and never on an unencrypted one.
+  The key goes with the ticket request; the server returns it with the check, and the computer being reached accepts
+  the ticket only when it is its own key (`Config::get_key_pair().1`, the key it registers with the ID server).
+* **Wrong tickets count like wrong passwords** (`check_failure` / `update_failure` in `src/server/connection.rs`).
+* **Settings in a heartbeat answer are ignored** (`ACCEPT_SERVER_STRATEGY = false`, `src/hbbs_http/sync.rs`): upstream
+  applies a «strategy» from the account server; ours never sends one, and a faked one could switch security settings
+  (or easy access itself) on this computer.
+* The tip under the box now says that this computer must also stay signed in to the same account (the server gives a
+  ticket only for a computer signed in to the asking account; logging out on it stops easy access until the next login).
+* Server side: FarooqRemote-Server `accounts-2.7-10` (the key in the ticket, the computer must be signed in to the same
+  account, every ticket request counted in the limit, caps on the memory tables).
 
 ## Never
 
