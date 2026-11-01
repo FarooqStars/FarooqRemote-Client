@@ -768,5 +768,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Create account", "إنشاء حساب"),
         ("Forgot password?", "نسيت كلمة المرور؟"),
         ("E-mail or user name", "البريد الإلكتروني أو اسم المستخدم"),
+        ("fr-easy-access-label", "وصول سهل: حسابي يتصل دون كلمة مرور"),
+        ("fr-easy-access-tip", "أجهزتك الأخرى المسجّلة في حساب فاروق ريموت نفسه تتصل بهذا الجهاز دون كلمة مروره. أما غيرك فيحتاج إلى كلمة المرور كما هو."),
+        ("fr-easy-access-account", "الحساب"),
+        ("fr-easy-access-login-first", "سجّل الدخول إلى حسابك أولًا (الإعدادات ← الحساب)، ثم فعّل الوصول السهل."),
     ].iter().cloned().collect();
 }

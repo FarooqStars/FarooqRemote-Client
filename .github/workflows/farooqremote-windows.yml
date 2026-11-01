@@ -32,7 +32,7 @@ env:
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.9"
   # Farooq Remote product version stamped on the output file name
-  FR_VERSION: "1.1.4"
+  FR_VERSION: "1.1.5"
   # Server facts (must match src/farooq.rs)
   FR_ID_SERVER: "remote.farooqmughal.net"
   FR_PUB_KEY: "11rU8HpBVbadu59plPSdMpFvkaJ2amnfcB+rJlZ2EWs="
@@ -77,6 +77,28 @@ jobs:
           sed -i "s|pub const RS_PUB_KEY: &str = \"[^\"]*\";|pub const RS_PUB_KEY: \&str = \"${FR_PUB_KEY}\";|" "$f"
           grep -n "RENDEZVOUS_SERVERS: \|RS_PUB_KEY: " "$f"
           grep -q "\"${FR_ID_SERVER}\"" "$f" || { echo "patch failed"; exit 1; }
+
+      - name: Farooq Remote - easy access ticket in LoginRequest (1.1.5)
+        # src/farooq.rs, src/client.rs and src/server/connection.rs use LoginRequest.fr_ticket (field 99). Apps that do not
+        # know the field (upstream RustDesk, Farooq Remote 1.1.4 and older) simply ignore it.
+        shell: bash
+        run: |
+          f=libs/hbb_common/protos/message.proto
+          python - "$f" <<'PY'
+          import re, sys
+          p = sys.argv[1]
+          t = open(p, encoding='utf-8', newline='').read()
+          if 'fr_ticket' in t:
+              sys.exit('fr_ticket is already there')
+          m = re.search(r'(message LoginRequest \{.*?  string avatar = 17;)(\r?\n)(\})', t, re.S)
+          if not m:
+              sys.exit('patch failed: LoginRequest / avatar = 17 not found')
+          nl = m.group(2)
+          t = t[:m.end(1)] + nl + '  string fr_ticket = 99; // Farooq Remote easy access: one-time ticket' + t[m.end(1):]
+          open(p, 'w', encoding='utf-8', newline='').write(t)
+          PY
+          grep -n "avatar = 17\|fr_ticket = 99" "$f"
+          grep -q "fr_ticket = 99" "$f" || { echo "patch failed"; exit 1; }
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

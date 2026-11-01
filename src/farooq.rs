@@ -18,8 +18,8 @@
 //     the field falls back to these defaults again.
 
 use hbb_common::{
-    config::{keys, APP_NAME, DEFAULT_SETTINGS},
-    log,
+    config::{keys, Config, LocalConfig, APP_NAME, DEFAULT_SETTINGS},
+    log, timeout,
 };
 use std::sync::Once;
 
@@ -59,6 +59,103 @@ pub fn token_for_id_server(token: String) -> String {
     } else {
         String::new()
     }
+}
+
+/// Farooq Remote 1.1.5 — «easy access», like TeamViewer's (owner 1 Nov 2026: «if i already use app login password for
+/// both side all the devices which visible under that account it should not ask password there should extra option in
+/// password windows for this feature»).
+/// On the computer to be reached, its owner ticks «Easy access» once while signed in (Settings → Security → Password); the
+/// account name is kept in OPTION_EASY_OWNER and the heartbeat tells the account server (src/hbbs_http/sync.rs). From his
+/// other computers, signed in to the same account and without a saved password, the app gets a one-time ticket
+/// (`easy_ticket`) and sends it in the end-to-end encrypted login (LoginRequest.fr_ticket, field 99, added to the
+/// protocol at build time). The computer asks the server about it once (`easy_check`) and lets the session in only for
+/// its own stored account and the computer that connected; anything else gets the password question as before.
+/// Server side: FarooqRemote-Server farooqremote/accounts/api/lib/freasy (accounts 2.7-9).
+pub const OPTION_EASY_ACCESS: &str = "fr-easy-access";
+/// The account (user name, lower case) chosen when easy access was ticked.
+pub const OPTION_EASY_OWNER: &str = "fr-easy-owner";
+const EASY_HTTP_TIMEOUT_MS: u64 = 6_000;
+
+/// This computer lets its owner's account in without a password.
+pub fn easy_access_on() -> bool {
+    Config::get_option(OPTION_EASY_ACCESS) == "Y"
+        && !Config::get_option(OPTION_EASY_OWNER).trim().is_empty()
+}
+
+fn easy_api_url(path: &str) -> Option<String> {
+    let api = crate::common::get_api_server(
+        Config::get_option("api-server"),
+        Config::get_option("custom-rendezvous-server"),
+    );
+    if api.is_empty() || crate::is_public(&api) {
+        return None;
+    }
+    Some(format!("{}{}", api, path))
+}
+
+/// Controller: a one-time ticket to reach `peer_id` without its password — only when signed in and when that computer
+/// allows easy access (the account server decides); `None` otherwise, and the password is asked as before.
+pub async fn easy_ticket(peer_id: &str) -> Option<String> {
+    let token = LocalConfig::get_option("access_token");
+    if token.is_empty() || peer_id.is_empty() {
+        return None;
+    }
+    let url = easy_api_url("/api/fr/easy/ticket")?;
+    let body = serde_json::json!({ "id": peer_id, "from": Config::get_id() }).to_string();
+    let header = format!("Authorization: Bearer {}", token);
+    let res = timeout(
+        EASY_HTTP_TIMEOUT_MS,
+        crate::post_request(url, body, &header),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    let v: serde_json::Value = serde_json::from_str(&res).ok()?;
+    if v["easy"].as_bool() != Some(true) {
+        return None;
+    }
+    let ticket = v["ticket"].as_str()?.to_owned();
+    if ticket.len() != 64 || !ticket.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    log::info!("easy access: ticket for {}", peer_id);
+    Some(ticket)
+}
+
+/// Computer being reached: is `ticket` from this computer's owner, presented by the computer `from_id`? Asks the account
+/// server once (the ticket is used up either way); any doubt means «no».
+pub async fn easy_check(ticket: &str, from_id: &str) -> bool {
+    if !easy_access_on() || ticket.len() != 64 || from_id.is_empty() {
+        return false;
+    }
+    let Some(url) = easy_api_url("/api/fr/easy/check") else {
+        return false;
+    };
+    let owner = Config::get_option(OPTION_EASY_OWNER).trim().to_lowercase();
+    let body = serde_json::json!({ "ticket": ticket, "id": Config::get_id() }).to_string();
+    let res = match timeout(EASY_HTTP_TIMEOUT_MS, crate::post_request(url, body, "")).await {
+        Ok(Ok(s)) => s,
+        _ => {
+            log::warn!("easy access: no answer from the account server");
+            return false;
+        }
+    };
+    let v: serde_json::Value = match serde_json::from_str(&res) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let ok = v["ok"].as_bool() == Some(true)
+        && v["user"]
+            .as_str()
+            .map(|u| u.trim().to_lowercase() == owner)
+            .unwrap_or(false)
+        && v["from"].as_str() == Some(from_id);
+    log::info!(
+        "easy access from {}: {}",
+        from_id,
+        if ok { "accepted" } else { "refused" }
+    );
+    ok
 }
 
 static APPLIED: Once = Once::new();

@@ -3567,6 +3567,34 @@ pub async fn handle_hash(
         return;
     }
 
+    // Farooq Remote 1.1.5: easy access — no saved password: ask the account server for a one-time ticket (only when signed
+    // in and the target allows it, see crate::farooq). The target answers with the session, or with «Empty Password»,
+    // which brings up the password question as before.
+    if password.is_empty() {
+        let id = lc.read().unwrap().id.clone();
+        if let Some(ticket) = crate::farooq::easy_ticket(&id).await {
+            let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
+            let (os_username, os_password) = if is_terminal {
+                ("".to_owned(), "".to_owned())
+            } else {
+                (
+                    lc.read().unwrap().get_option("os-username"),
+                    lc.read().unwrap().get_option("os-password"),
+                )
+            };
+            let mut msg_out =
+                lc.read()
+                    .unwrap()
+                    .create_login_msg(os_username, os_password, Vec::new());
+            if let Some(message::Union::LoginRequest(lr)) = msg_out.union.as_mut() {
+                lr.fr_ticket = ticket;
+            }
+            allow_err!(peer.send(&msg_out).await);
+            lc.write().unwrap().hash = hash;
+            return;
+        }
+    }
+
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
         interface.msgbox("input-password", "Password Required", "", "");

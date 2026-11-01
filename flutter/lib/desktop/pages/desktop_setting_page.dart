@@ -1285,8 +1285,63 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             // if (usePassword)
             //   hide_cm(!locked).marginOnly(left: _kContentHSubMargin - 6),
             if (usePassword) radios[2],
+            // Farooq Remote 1.1.5: easy access, like TeamViewer's (src/farooq.rs)
+            if (usePassword) _frEasyAccess(context),
           ]);
         })));
+  }
+
+  // Farooq Remote 1.1.5: «easy access» like TeamViewer's — the owner's own account connects to this computer without a
+  // password. Ticked once while signed in; the account name is kept (fr-easy-owner) and read by src/farooq.rs in the
+  // service, which lets in only that account (with a one-time ticket from the account server).
+  Widget _frEasyAccess(BuildContext context) {
+    final owner = bind.mainGetOptionSync(key: 'fr-easy-owner');
+    final on =
+        bind.mainGetOptionSync(key: 'fr-easy-access') == 'Y' && owner.isNotEmpty;
+    final enabled = !locked;
+    Future<void> toggle(bool v) async {
+      if (v) {
+        final user = gFFI.userModel.userName.value.trim().toLowerCase();
+        if (user.isEmpty) {
+          showToast(translate('fr-easy-access-login-first'));
+          return;
+        }
+        await bind.mainSetOption(key: 'fr-easy-owner', value: user);
+        await bind.mainSetOption(key: 'fr-easy-access', value: 'Y');
+      } else {
+        await bind.mainSetOption(key: 'fr-easy-access', value: '');
+      }
+      if (mounted) setState(() {});
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          child: Row(
+            children: [
+              Checkbox(
+                  value: on,
+                  onChanged: enabled ? (v) => toggle(v == true) : null),
+              Expanded(
+                child: Text(translate('fr-easy-access-label'),
+                        style: TextStyle(
+                            fontSize: _kContentFontSize,
+                            color: disabledTextColor(context, enabled)))
+                    .marginOnly(left: 5),
+              ),
+            ],
+          ),
+          onTap: enabled ? () => toggle(!on) : null,
+        ),
+        Text(
+          on
+              ? '${translate('fr-easy-access-tip')}\n${translate('fr-easy-access-account')}: $owner'
+              : translate('fr-easy-access-tip'),
+          style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+        ).marginOnly(left: 45, right: 10, bottom: 6),
+      ],
+    ).marginOnly(left: _kRadioLeftMargin, top: 6);
   }
 
   Widget more(BuildContext context) {

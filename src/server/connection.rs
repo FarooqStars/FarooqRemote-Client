@@ -260,6 +260,7 @@ enum ConnAuditPrimaryAuth {
     TemporaryPassword = 2,
     PermanentPassword = 3,
     SwitchSides = 4,
+    FarooqEasyAccess = 9, // Farooq Remote 1.1.5: the owner's own account (easy access)
 }
 
 impl ConnAuditPrimaryAuth {
@@ -2701,6 +2702,26 @@ impl Connection {
                     self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
                 } else {
                     self.send_login_error(err_msg).await;
+                }
+            } else if !lr.fr_ticket.is_empty() {
+                // Farooq Remote 1.1.5: easy access — the owner's own account (see crate::farooq::easy_check); anything
+                // else gets «Empty Password», so the other side asks for the password as before
+                if crate::farooq::easy_check(&lr.fr_ticket, &lr.my_id).await {
+                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::FarooqEasyAccess);
+                    if err_msg.is_empty() {
+                        #[cfg(target_os = "linux")]
+                        self.linux_headless_handle.wait_desktop_cm_ready().await;
+                        if !self.send_logon_response_and_keep_alive().await {
+                            return false;
+                        }
+                        self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
+                    } else {
+                        self.send_login_error(err_msg).await;
+                    }
+                } else {
+                    self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_EMPTY)
+                        .await;
+                    self.try_start_cm(lr.my_id, lr.my_name, false);
                 }
             } else if lr.password.is_empty() {
                 if err_msg.is_empty() {

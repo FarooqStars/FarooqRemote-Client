@@ -26,6 +26,7 @@ by the workflow below.
 | `res/*`, `flutter/assets/icon.svg`, `flutter/windows/runner/resources/app_icon.ico`, Android mipmaps, `flutter/macos/Runner/AppIcon.icns`, iOS AppIcon set | Farooq Remote icons. |
 | `flutter/assets/logo.png` (new, 1.1.3), `res/farooq-branding/make_banner.py` | The owner's banner (icon + name on teal) at the top of the main window. |
 | `src/client.rs` (one line in `_start_inner`), `src/farooq.rs` | 1.1.4: the account token is not sent to the open-source ID server, so a logged-in app connects (no wait for a key exchange the server never sends). |
+| `src/farooq.rs` (easy_*), `src/client.rs` (`handle_hash`), `src/server/connection.rs` (login), `src/hbbs_http/sync.rs` (heartbeat), `desktop_setting_page.dart`, `src/lang/{en,ur,ar}.rs`, workflow step for `message.proto` | 1.1.5: easy access — the owner's own account connects without a password (see «1.1.5» below). |
 | `.github/workflows/farooqremote-windows.yml` (new) | Windows x64 build (manual trigger). |
 
 Everything else is upstream, byte for byte. Upstream workflows are left in place but
@@ -106,6 +107,24 @@ The exe is unsigned: Windows SmartScreen shows "unknown publisher" → *More inf
   request), so no key exchange is awaited and the account token never travels to the ID server. The session between
   the two computers is end-to-end encrypted exactly as before; the account functions (address book, devices) use the
   account server over https as before.
+
+## 1.1.5 — easy access, like TeamViewer's (1 Nov 2026)
+
+* The owner: «if i already use app login password for both side all the devices which visible under that account it
+  should not ask password there should extra option in password windows for this feature … make little research on
+  TeamViewer and give me same functionality». TeamViewer: assign the device to the account, tick «Grant easy access»
+  once on each device; the account then connects without a password, everyone else still needs one.
+* Settings → Security → Password: **«Easy access: my account connects without a password»** (Flutter
+  `desktop_setting_page.dart` `_frEasyAccess`, words in en/ur/ar). Ticking it needs the account to be signed in; the
+  account name is kept in the option `fr-easy-owner` (option `fr-easy-access` = `Y`), both read by the service.
+* The heartbeat (`src/hbbs_http/sync.rs`) says `fr_easy` to the account server. A signed-in controller without a saved
+  password asks the server for a one-time ticket (`crate::farooq::easy_ticket`, `src/client.rs` `handle_hash`) and sends
+  it in the end-to-end encrypted login as `LoginRequest.fr_ticket` (field 99, added to `message.proto` by the workflow at
+  build time; unknown to older apps, which ignore it). The computer being reached asks the server once
+  (`crate::farooq::easy_check`, `src/server/connection.rs`) and lets the session in only for its own stored account and
+  the computer that connected (audit value 9 = easy access); otherwise it answers «Empty Password», so the controller
+  asks for the password as before. 2FA, if switched on, is still asked.
+* Server side: FarooqRemote-Server `accounts-2.7-9` (lib/freasy, controller api/farooq_easy.go, ci/easy_test.py).
 
 ## Never
 

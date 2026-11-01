@@ -768,5 +768,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Create account", "اکاؤنٹ بنائیں"),
         ("Forgot password?", "پاس ورڈ بھول گئے؟"),
         ("E-mail or user name", "ای میل یا صارف نام"),
+        ("fr-easy-access-label", "آسان رسائی: میرا اکاؤنٹ بغیر پاس ورڈ کے جڑے"),
+        ("fr-easy-access-tip", "اسی فاروق ریموٹ اکاؤنٹ میں لاگ ان آپ کے دوسرے کمپیوٹر اس کمپیوٹر سے اس کے پاس ورڈ کے بغیر جڑیں گے۔ باقی سب کو پاس ورڈ ہی چاہیے ہوگا۔"),
+        ("fr-easy-access-account", "اکاؤنٹ"),
+        ("fr-easy-access-login-first", "پہلے اپنے اکاؤنٹ میں لاگ ان کریں (ترتیبات ← اکاؤنٹ)، پھر آسان رسائی پر ٹک لگائیں۔"),
     ].iter().cloned().collect();
 }

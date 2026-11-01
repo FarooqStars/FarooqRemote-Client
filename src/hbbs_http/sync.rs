@@ -236,6 +236,8 @@ async fn start_hbbs_sync_async() {
                 v["id"] = json!(id);
                 v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
                 v["ver"] = json!(hbb_common::get_version_number(crate::VERSION));
+                // Farooq Remote 1.1.5: easy access allowed on this computer (see crate::farooq)
+                v["fr_easy"] = json!(crate::farooq::easy_access_on());
                 if !conns.is_empty() {
                     v["conns"] = json!(conns);
                 }
