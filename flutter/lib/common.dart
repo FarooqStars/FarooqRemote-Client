@@ -371,7 +371,7 @@ class MyTheme {
     }),
   );
 
-  static ThemeData lightTheme = ThemeData(
+  static final ThemeData _lightThemeBase = ThemeData(
     // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
     useMaterial3: false,
     brightness: Brightness.light,
@@ -470,7 +470,7 @@ class MyTheme {
       TabbarTheme.light,
     ],
   );
-  static ThemeData darkTheme = ThemeData(
+  static final ThemeData _darkThemeBase = ThemeData(
     useMaterial3: false,
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
@@ -577,6 +577,44 @@ class MyTheme {
       TabbarTheme.dark,
     ],
   );
+
+  // Farooq Remote (FA-020, owner 1 Nov 2026): when the app language is Urdu, Arabic or Persian, all text uses the Naskh
+  // font "FS Urdu" (Noto Naskh Arabic, bundled in assets/fonts). It has no Latin letters, so English words and names
+  // fall back to the system font. The language is read again on every rebuild (Settings -> Language reloads windows).
+  static const String kNaskhFontFamily = 'FS Urdu';
+  static ThemeData? _lightThemeNaskh;
+  static ThemeData? _darkThemeNaskh;
+
+  /// The language the app shows now, lower case ("ur", "ar", "en", or the system's "en_us" when set to Default).
+  static String get effectiveLanguage {
+    try {
+      var lang = bind.mainGetLocalOption(key: kCommConfKeyLang);
+      if (lang.isEmpty || lang == 'default') {
+        lang = localeName;
+      }
+      return lang.toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static bool get isNaskhLanguage {
+    final lang = effectiveLanguage;
+    return lang.startsWith('ur') || lang.startsWith('ar') || lang.startsWith('fa');
+  }
+
+  static ThemeData _withNaskh(ThemeData t) => t.copyWith(
+        textTheme: t.textTheme.apply(fontFamily: kNaskhFontFamily),
+        primaryTextTheme: t.primaryTextTheme.apply(fontFamily: kNaskhFontFamily),
+      );
+
+  static ThemeData get lightTheme => isNaskhLanguage
+      ? (_lightThemeNaskh ??= _withNaskh(_lightThemeBase))
+      : _lightThemeBase;
+
+  static ThemeData get darkTheme => isNaskhLanguage
+      ? (_darkThemeNaskh ??= _withNaskh(_darkThemeBase))
+      : _darkThemeBase;
 
   static ThemeMode getThemeModePreference() {
     return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
@@ -688,6 +726,7 @@ List<Locale> supportedLocales = const [
   Locale('lt'),
   Locale('lv'),
   Locale('ar'),
+  Locale('ur'),
   Locale('he'),
   Locale('hr'),
 ];

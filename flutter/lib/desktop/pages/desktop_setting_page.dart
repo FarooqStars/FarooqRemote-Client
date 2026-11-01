@@ -2456,6 +2456,16 @@ class _AboutState extends State<_About> {
                   ).marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
+                    launchUrlString(MyTheme.effectiveLanguage.startsWith('ur')
+                        ? 'https://www.farooqmughal.net/ur/farooqremote/help/'
+                        : 'https://www.farooqmughal.net/farooqremote/help/');
+                  },
+                  child: Text(
+                    translate('Help'),
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
+              InkWell(
+                  onTap: () {
                     launchUrlString('https://www.farooqmughal.net');
                   },
                   child: Text(

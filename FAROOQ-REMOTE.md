@@ -17,7 +17,8 @@ by the workflow below.
 | `src/lib.rs`, `src/common.rs` | `pub mod farooq;` and one call `crate::farooq::apply()` at the top of `load_custom_client()` (runs on desktop and mobile start-up). |
 | `src/lang/ur.rs` (new), `src/lang.rs` | Urdu language added (764 strings). |
 | `src/lang/en.rs` | `powered_by_me` → "Based on RustDesk · developed by Mohammad Farooq". |
-| `flutter/lib/desktop/pages/desktop_setting_page.dart` | About card: developer line, website/privacy links, source URL. |
+| `flutter/lib/desktop/pages/desktop_setting_page.dart` | About card: developer line, website/privacy/help links, source URL. |
+| `flutter/assets/fonts/*` (new), `flutter/pubspec.yaml`, `flutter/lib/common.dart` | 1.1.1: Naskh font "FS Urdu" (Noto Naskh Arabic 2.021, OFL) for Urdu / Arabic / Persian; `MyTheme.lightTheme` / `darkTheme` became getters; `Locale('ur')` in the supported locales. |
 | `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/lib/mobile/pages/settings_page.dart` | rustdesk.com links → farooqmughal.net (1.1.0; before: farooqmusic.com / mymandoob.com). |
 | `flutter/windows/runner/Runner.rc` | Company / product / description / copyright strings. |
 | `flutter/android/app/src/main/AndroidManifest.xml` | App label "Farooq Remote". |
@@ -58,6 +59,18 @@ Optional input `release-tag` (e.g. `v1.1.0`) also creates a GitHub Release with
 
 The exe is unsigned: Windows SmartScreen shows "unknown publisher" → *More info* →
 *Run anyway*. The Microsoft Store (MSIX) route is planned to avoid this.
+
+## 1.1.1 — Urdu and Arabic in Naskh (1 Nov 2026)
+
+* The owner: «add Arabic & Urdu … even on remote client with URDU naskh fonts». Urdu (Farooq's
+  764 strings) and Arabic (upstream) were already in **Settings → General → Language**; now,
+  when the app language is Urdu, Arabic or Persian, every text uses the Naskh font **FS Urdu**
+  (Noto Naskh Arabic 2.021, hinted TTF, SIL OFL 1.1 — `flutter/assets/fonts/`), the same Urdu
+  font as farooqstars.com and farooqmughal.net. English words keep the system font.
+* `Locale('ur')` added, so a Windows set to Urdu gets the right-to-left layout as Arabic,
+  Persian and Hebrew already do. The layout on an English Windows stays as upstream.
+* About → **Help** opens the guide: `farooqmughal.net/ur/farooqremote/help/` when the app is
+  in Urdu, otherwise `farooqmughal.net/farooqremote/help/`.
 
 ## Never
 

@@ -152,6 +152,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/
+    - assets/fonts/OFL-NotoNaskhArabic.txt
 
   fonts:
     - family: GestureIcons
@@ -172,6 +173,13 @@ flutter:
     - family: More
       fonts:
         - asset: assets/more.ttf
+    # Farooq Remote (FA-020, owner 1 Nov 2026): Urdu / Arabic in Naskh - "FS Urdu" = Noto Naskh Arabic 2.021 (SIL OFL 1.1,
+    # assets/fonts/OFL-NotoNaskhArabic.txt), the same Urdu font as farooqstars.com and farooqmughal.net.
+    - family: FS Urdu
+      fonts:
+        - asset: assets/fonts/NotoNaskhArabic-Regular.ttf
+        - asset: assets/fonts/NotoNaskhArabic-Bold.ttf
+          weight: 700
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
