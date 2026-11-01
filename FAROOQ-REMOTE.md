@@ -27,7 +27,7 @@ by the workflow below.
 | `flutter/assets/logo.png` (new, 1.1.3), `res/farooq-branding/make_banner.py` | The owner's banner (icon + name on teal) at the top of the main window. |
 | `src/client.rs` (one line in `_start_inner`), `src/farooq.rs` | 1.1.4: the account token is not sent to the open-source ID server, so a logged-in app connects (no wait for a key exchange the server never sends). |
 | `src/farooq.rs` (easy_*), `src/client.rs` (`handle_hash`), `src/server/connection.rs` (login), `src/hbbs_http/sync.rs` (heartbeat), `desktop_setting_page.dart`, `src/lang/{en,ur,ar}.rs`, workflow step for `message.proto` | 1.1.5: easy access — the owner's own account connects without a password (see «1.1.5» below). |
-| `src/farooq.rs` (`easy_post`, `ACCEPT_SERVER_STRATEGY`), `src/client.rs` (`fr_easy_pk`), `src/client/io_loop.rs`, `src/server/connection.rs`, `src/hbbs_http/sync.rs`, `src/lang/{en,ur,ar}.rs` | 1.1.6: easy access after a security review — strict https, the ticket tied to the encrypted session, wrong tickets counted, heartbeat «strategy» ignored (see «1.1.6» below). |
+| `src/farooq.rs` (`easy_post`, `ACCEPT_SERVER_STRATEGY`), `src/client.rs` (`fr_easy_pk`), `src/client/io_loop.rs`, `src/server/connection.rs`, `src/hbbs_http/sync.rs`, `src/hbbs_http/http_client.rs` + `src/hbbs_http.rs` (`create_http_client_async_no_redirect`), `src/lang/{en,ur,ar}.rs` | 1.1.6: easy access after a security review — strict https, the ticket tied to the encrypted session, wrong tickets counted, heartbeat «strategy» ignored (see «1.1.6» below). |
 | `.github/workflows/farooqremote-windows.yml` (new) | Windows x64 build (manual trigger). |
 
 Everything else is upstream, byte for byte. Upstream workflows are left in place but
@@ -134,8 +134,9 @@ A review of 1.1.5 (before it was given to anyone) found ways around easy access;
 
 * **The server's answer can not be faked.** `easy_ticket` / `easy_check` no longer use upstream `post_request`, which
   retries with «accept any certificate» and can go through the ID server instead. `crate::farooq::easy_post`: https only,
-  the certificate always checked (rustls with the system's roots, then the system's own TLS), no detour, 6 s, only a 2xx
-  answer counts. The account token is never sent without a checked certificate.
+  the certificate always checked (rustls with the system's roots, then the system's own TLS), no detour, no redirect
+  followed (`hbbs_http::create_http_client_async_no_redirect`, same TLS and proxy settings as upstream's client), 6 s,
+  only a 2xx answer from that very address counts. The account token is never sent without a checked certificate.
 * **A ticket belongs to one encrypted session.** The connection keeps the other computer's key (checked through the ID
   server) only when it is end-to-end encrypted (`src/client/io_loop.rs` → `LoginConfigHandler.fr_easy_pk`);
   `handle_hash` takes it once, so a ticket is asked for at most once per connection and never on an unencrypted one.
@@ -149,6 +150,13 @@ A review of 1.1.5 (before it was given to anyone) found ways around easy access;
   ticket only for a computer signed in to the asking account; logging out on it stops easy access until the next login).
 * Server side: FarooqRemote-Server `accounts-2.7-10` (the key in the ticket, the computer must be signed in to the same
   account, every ticket request counted in the limit, caps on the memory tables).
+* A second independent review of 1.1.6 + 2.7-10 found no way in for anyone without the owner's account. Known limits:
+  the owner's account (its token on his PCs) now opens every easy-access computer, as with TeamViewer — 2FA in
+  Settings → Security is still asked on this path if switched on; anyone who knows a computer's ID **and** its uuid can
+  send a heartbeat that switches its announcement off (easy access then asks for the password; nobody gets in that way).
+* Build note: `LoginRequest.fr_ticket` (field 99) is added to `libs/hbb_common/protos/message.proto` only by the step
+  in `.github/workflows/farooqremote-windows.yml`; any other build (Linux, Android, a local `cargo check`) must run the
+  same step first. Upstream's ci.yml / flutter-ci.yml run only for `master` and pull requests, so they are not affected.
 
 ## Never
 

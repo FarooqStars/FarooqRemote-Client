@@ -109,6 +109,13 @@ pub fn create_http_client_async(
     configure_http_client!(builder, tls_type, danger_accept_invalid_cert, AsyncClient)
 }
 
+/// Farooq Remote 1.1.6: the same client (TLS type, the proxy of Settings → Network) but it never follows a redirect;
+/// used by crate::farooq for easy access, where only the account server's own answer may count.
+pub fn create_http_client_async_no_redirect(tls_type: TlsType) -> AsyncClient {
+    let builder = AsyncClient::builder().redirect(reqwest::redirect::Policy::none());
+    configure_http_client!(builder, tls_type, false, AsyncClient)
+}
+
 pub fn get_url_for_tls<'a>(url: &'a str, proxy_conf: &'a Option<Socks5Server>) -> &'a str {
     if is_plain(url) {
         if let Some(conf) = proxy_conf {

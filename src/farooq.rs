@@ -116,16 +116,17 @@ fn easy_api_url(path: &str) -> Option<String> {
 
 /// A strict JSON POST for easy access: https only (see `easy_api_url`), the certificate is always checked (rustls with
 /// the system's roots first, then the system's own TLS — never «accept invalid certificates»), no fallback through the
-/// ID server, one time limit, and only a 2xx answer counts.
+/// ID server, no redirect followed, one time limit, and only a 2xx answer from that very address counts.
 async fn easy_post(
     url: &str,
     body: &serde_json::Value,
     bearer: Option<&str>,
 ) -> Option<serde_json::Value> {
+    let want = reqwest::Url::parse(url).ok()?;
     let body = body.to_string();
     let limit = std::time::Duration::from_millis(EASY_HTTP_TIMEOUT_MS);
     for tls in [TlsType::Rustls, TlsType::NativeTls] {
-        let mut req = crate::hbbs_http::create_http_client_async(tls, false)
+        let mut req = crate::hbbs_http::create_http_client_async_no_redirect(tls)
             .post(url)
             .header("Content-Type", "application/json")
             .timeout(limit)
@@ -135,7 +136,7 @@ async fn easy_post(
         }
         match req.send().await {
             Ok(resp) => {
-                if !resp.status().is_success() {
+                if !resp.status().is_success() || resp.url() != &want {
                     log::warn!("easy access: the account server answered {}", resp.status());
                     return None;
                 }
