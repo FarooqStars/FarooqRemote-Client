@@ -390,6 +390,8 @@ impl Client {
         (i32, String),
         bool,
     )> {
+        // Farooq Remote 1.1.4: the account token is not sent to the ID server (see crate::farooq::ID_SERVER_SECURE_TCP)
+        let token = crate::farooq::token_for_id_server(token);
         let mut start = Instant::now();
         let mut socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));

@@ -43,6 +43,24 @@ pub const DOWNLOAD_URL: &str = "https://www.farooqmughal.net/farooqremote";
 pub const PRIVACY_URL: &str = "https://www.farooqmughal.net/farooqremote/privacy";
 pub const SOURCE_URL: &str = "https://github.com/FarooqStars/FarooqRemote-Client";
 
+/// Farooq Remote 1.1.4 (owner 1 Nov 2026: «i install app on 2 different pc and it installed but not connecting» —
+/// «Failed to secure tcp: deadline has elapsed» when an account is logged in).
+/// Our ID server is the open-source hbbs: it never starts the «secure TCP» key exchange and it does not use the account
+/// token. Upstream, when an account is logged in, waits for that key exchange before it sends the token to the ID
+/// server, so every connection failed after the time-out. Farooq Remote keeps the account token away from the ID server
+/// instead (nothing there needs it), so no key exchange is awaited; the connection between the two computers stays
+/// end-to-end encrypted exactly as before. Set to true only with an ID server that sends the key exchange.
+pub const ID_SERVER_SECURE_TCP: bool = false;
+
+/// The account token as it may go to the ID server: empty unless the ID server secures the TCP connection.
+pub fn token_for_id_server(token: String) -> String {
+    if ID_SERVER_SECURE_TCP {
+        token
+    } else {
+        String::new()
+    }
+}
+
 static APPLIED: Once = Once::new();
 
 /// Apply the branding. Safe to call more than once; runs only the first time.

@@ -25,6 +25,7 @@ by the workflow below.
 | `flutter/android/app/src/main/AndroidManifest.xml` | App label "Farooq Remote". |
 | `res/*`, `flutter/assets/icon.svg`, `flutter/windows/runner/resources/app_icon.ico`, Android mipmaps, `flutter/macos/Runner/AppIcon.icns`, iOS AppIcon set | Farooq Remote icons. |
 | `flutter/assets/logo.png` (new, 1.1.3), `res/farooq-branding/make_banner.py` | The owner's banner (icon + name on teal) at the top of the main window. |
+| `src/client.rs` (one line in `_start_inner`), `src/farooq.rs` | 1.1.4: the account token is not sent to the open-source ID server, so a logged-in app connects (no wait for a key exchange the server never sends). |
 | `.github/workflows/farooqremote-windows.yml` (new) | Windows x64 build (manual trigger). |
 
 Everything else is upstream, byte for byte. Upstream workflows are left in place but
@@ -92,6 +93,19 @@ The exe is unsigned: Windows SmartScreen shows "unknown publisher" → *More inf
   `loadLogo()` shows `assets/logo.png` at the top of the left pane (at most 300 x 60) when the file exists —
   no Dart change. The app icon and the tray icon stay as they are (made from the same branding files in
   September by `res/farooq-branding/make_icons.py`).
+
+## 1.1.4 — connecting while logged in (1 Nov 2026)
+
+* The owner: «i install app on 2 different pc and it installed but not connecting» — with an account logged in,
+  every connection stopped with «Failed to secure tcp: deadline has elapsed».
+* Cause: when a token is present, upstream first waits for a «secure TCP» key exchange from the ID server (hbbs)
+  before sending the token (`secure_tcp` in `src/client.rs`). Our ID server is the open-source hbbs (1.1.16): it
+  never sends that key exchange (only RustDesk Server Pro and forks do) and it does not use the token at all.
+* Fix: `src/farooq.rs` `ID_SERVER_SECURE_TCP = false` + `token_for_id_server()`; the first line of
+  `Client::_start_inner` (`src/client.rs`) empties the token for the ID-server messages (punch-hole and relay
+  request), so no key exchange is awaited and the account token never travels to the ID server. The session between
+  the two computers is end-to-end encrypted exactly as before; the account functions (address book, devices) use the
+  account server over https as before.
 
 ## Never
 
