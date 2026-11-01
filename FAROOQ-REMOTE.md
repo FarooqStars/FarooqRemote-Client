@@ -15,7 +15,8 @@ by the workflow below.
 |---|---|
 | `src/farooq.rs` (new) | The single branding point: app name `FarooqRemote`, default ID server / relay / public key / account (API) server, website URLs. |
 | `src/lib.rs`, `src/common.rs` | `pub mod farooq;` and one call `crate::farooq::apply()` at the top of `load_custom_client()` (runs on desktop and mobile start-up). |
-| `src/lang/ur.rs` (new), `src/lang.rs` | Urdu language added (764 strings). |
+| `src/lang/ur.rs` (new), `src/lang.rs` | Urdu language added (764 strings; 1.1.2: +3 for the login window). |
+| `flutter/lib/common/widgets/login.dart`, `src/lang/ar.rs` | 1.1.2: «Create account» and «Forgot password?» under the login button (they open the account website's sign-up / forgot-password page in the app's language); the user-name box says «E-mail or user name». |
 | `src/lang/en.rs` | `powered_by_me` → "Based on RustDesk · developed by Mohammad Farooq". |
 | `flutter/lib/desktop/pages/desktop_setting_page.dart` | About card: developer line, website/privacy/help links, source URL. |
 | `flutter/assets/fonts/*` (new), `flutter/pubspec.yaml`, `flutter/lib/common.dart`, `flutter/lib/main.dart` | 1.1.1: Naskh font "FS Urdu" (Noto Naskh Arabic 2.021, OFL) for Urdu / Arabic / Persian; new getters `MyTheme.appLightTheme` / `appDarkTheme` (used by `flutter/lib/main.dart`; the upstream `lightTheme` / `darkTheme` lines stay as they are, because the Flutter 3.44 patch script finds them by those words); `Locale('ur')` in the supported locales. |
@@ -71,6 +72,16 @@ The exe is unsigned: Windows SmartScreen shows "unknown publisher" → *More inf
   Persian and Hebrew already do. The layout on an English Windows stays as upstream.
 * About → **Help** opens the guide: `farooqmughal.net/ur/farooqremote/help/` when the app is
   in Urdu, otherwise `farooqmughal.net/farooqremote/help/`.
+
+## 1.1.2 — anyone can make an account (1 Nov 2026)
+
+* The owner: «make system from app user can Register this App by Email id and password, and we
+  make this app proper working app for any users». The account server (release `accounts-2.7-3`,
+  FarooqRemote-Server) now has sign-up with an e-mail address + password, proved by a 6-digit
+  e-mail code, and «forgot password» by e-mail code.
+* The login window has **Create account** and **Forgot password?** — they open
+  `<account server>/_admin/#/register` or `#/forgot` in the browser, in the app's language
+  (`?lang=ur|ar|en`). The user-name box says «E-mail or user name».
 
 ## Never
 

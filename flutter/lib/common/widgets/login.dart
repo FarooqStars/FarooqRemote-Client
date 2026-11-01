@@ -381,6 +381,27 @@ class LoginWidgetOP extends StatelessWidget {
   }
 }
 
+// Farooq Remote (FA-020, owner 1 Nov 2026): anyone can make an account with an e-mail address + password on the account
+// website (the e-mail is proved with a 6-digit code), and «forgot password» sends a code to the e-mail. Both buttons
+// open that page of the account server in the browser, in the app's language.
+Future<void> frOpenAccountPage(String page) async {
+  var api = (await bind.mainGetApiServer()).trim();
+  if (api.isEmpty) {
+    api = 'https://remote.farooqmughal.net';
+  }
+  while (api.endsWith('/')) {
+    api = api.substring(0, api.length - 1);
+  }
+  final lang = MyTheme.effectiveLanguage;
+  final l = lang.startsWith('ur')
+      ? 'ur'
+      : lang.startsWith('ar')
+          ? 'ar'
+          : 'en';
+  await launchUrl(Uri.parse('$api/_admin/#/$page?lang=$l'),
+      mode: LaunchMode.externalApplication);
+}
+
 class LoginWidgetUserPass extends StatelessWidget {
   final TextEditingController username;
   final TextEditingController pass;
@@ -411,7 +432,8 @@ class LoginWidgetUserPass extends StatelessWidget {
           children: [
             const SizedBox(height: 8.0),
             DialogTextField(
-                title: translate(DialogTextField.kUsernameTitle),
+                // Farooq Remote: a signed-up account's user name is its e-mail address
+                title: translate('E-mail or user name'),
                 controller: username,
                 focusNode: userFocusNode,
                 prefixIcon: DialogTextField.kUsernameIcon,
@@ -445,6 +467,32 @@ class LoginWidgetUserPass extends StatelessWidget {
                     )),
               ),
             ])),
+            const SizedBox(height: 12.0),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 20,
+              runSpacing: 6,
+              children: [
+                InkWell(
+                  onTap: () => frOpenAccountPage('register'),
+                  child: Text(
+                    translate('Create account'),
+                    style: const TextStyle(
+                        color: MyTheme.accent,
+                        decoration: TextDecoration.underline),
+                  ),
+                ),
+                InkWell(
+                  onTap: () => frOpenAccountPage('forgot'),
+                  child: Text(
+                    translate('Forgot password?'),
+                    style: const TextStyle(
+                        color: MyTheme.accent,
+                        decoration: TextDecoration.underline),
+                  ),
+                ),
+              ],
+            ),
           ],
         ));
   }

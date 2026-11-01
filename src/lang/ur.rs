@@ -765,5 +765,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "تمام مانیٹر"),
         ("#{} monitor", "مانیٹر #{}"),
         ("conn-e2ee-unavailable-tip", "اینڈ ٹو اینڈ انکرپشن کی تصدیق نہیں ہو سکی۔\nریموٹ ڈیوائس شاید ابھی سیٹ اپ ہو رہی ہے۔ بعد میں دوبارہ کوشش کریں۔\nاگر یہ بار بار ہو، تو سرور ناقابلِ بھروسہ ہو سکتا ہے۔\nپھر بھی جاری رکھیں؟"),
+        ("Create account", "اکاؤنٹ بنائیں"),
+        ("Forgot password?", "پاس ورڈ بھول گئے؟"),
+        ("E-mail or user name", "ای میل یا صارف نام"),
     ].iter().cloned().collect();
 }
