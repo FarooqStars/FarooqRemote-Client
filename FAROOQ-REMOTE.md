@@ -18,7 +18,7 @@ by the workflow below.
 | `src/lang/ur.rs` (new), `src/lang.rs` | Urdu language added (764 strings). |
 | `src/lang/en.rs` | `powered_by_me` → "Based on RustDesk · developed by Mohammad Farooq". |
 | `flutter/lib/desktop/pages/desktop_setting_page.dart` | About card: developer line, website/privacy/help links, source URL. |
-| `flutter/assets/fonts/*` (new), `flutter/pubspec.yaml`, `flutter/lib/common.dart` | 1.1.1: Naskh font "FS Urdu" (Noto Naskh Arabic 2.021, OFL) for Urdu / Arabic / Persian; `MyTheme.lightTheme` / `darkTheme` became getters; `Locale('ur')` in the supported locales. |
+| `flutter/assets/fonts/*` (new), `flutter/pubspec.yaml`, `flutter/lib/common.dart`, `flutter/lib/main.dart` | 1.1.1: Naskh font "FS Urdu" (Noto Naskh Arabic 2.021, OFL) for Urdu / Arabic / Persian; new getters `MyTheme.appLightTheme` / `appDarkTheme` (used by `flutter/lib/main.dart`; the upstream `lightTheme` / `darkTheme` lines stay as they are, because the Flutter 3.44 patch script finds them by those words); `Locale('ur')` in the supported locales. |
 | `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/lib/mobile/pages/settings_page.dart` | rustdesk.com links → farooqmughal.net (1.1.0; before: farooqmusic.com / mymandoob.com). |
 | `flutter/windows/runner/Runner.rc` | Company / product / description / copyright strings. |
 | `flutter/android/app/src/main/AndroidManifest.xml` | App label "Farooq Remote". |

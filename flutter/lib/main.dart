@@ -366,8 +366,8 @@ void _runApp(
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: title,
-      theme: MyTheme.lightTheme,
-      darkTheme: MyTheme.darkTheme,
+      theme: MyTheme.appLightTheme,
+      darkTheme: MyTheme.appDarkTheme,
       themeMode: themeMode,
       home: home,
       localizationsDelegates: const [
@@ -503,8 +503,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           title: isWeb
               ? '${bind.mainGetAppNameSync()} Web Client V2 (Preview)'
               : bind.mainGetAppNameSync(),
-          theme: MyTheme.lightTheme,
-          darkTheme: MyTheme.darkTheme,
+          theme: MyTheme.appLightTheme,
+          darkTheme: MyTheme.appDarkTheme,
           themeMode: MyTheme.currentThemeMode(),
           home: isDesktop
               ? const DesktopTabPage()

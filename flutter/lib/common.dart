@@ -371,7 +371,7 @@ class MyTheme {
     }),
   );
 
-  static final ThemeData _lightThemeBase = ThemeData(
+  static ThemeData lightTheme = ThemeData(
     // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
     useMaterial3: false,
     brightness: Brightness.light,
@@ -470,7 +470,7 @@ class MyTheme {
       TabbarTheme.light,
     ],
   );
-  static final ThemeData _darkThemeBase = ThemeData(
+  static ThemeData darkTheme = ThemeData(
     useMaterial3: false,
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
@@ -581,6 +581,8 @@ class MyTheme {
   // Farooq Remote (FA-020, owner 1 Nov 2026): when the app language is Urdu, Arabic or Persian, all text uses the Naskh
   // font "FS Urdu" (Noto Naskh Arabic, bundled in assets/fonts). It has no Latin letters, so English words and names
   // fall back to the system font. The language is read again on every rebuild (Settings -> Language reloads windows).
+  // The apps in main.dart use appLightTheme / appDarkTheme. lightTheme / darkTheme above keep their upstream names and
+  // lines, because .github/patches/apply_flutter_3.44_source_patches.sh finds them by those exact words.
   static const String kNaskhFontFamily = 'FS Urdu';
   static ThemeData? _lightThemeNaskh;
   static ThemeData? _darkThemeNaskh;
@@ -608,13 +610,13 @@ class MyTheme {
         primaryTextTheme: t.primaryTextTheme.apply(fontFamily: kNaskhFontFamily),
       );
 
-  static ThemeData get lightTheme => isNaskhLanguage
-      ? (_lightThemeNaskh ??= _withNaskh(_lightThemeBase))
-      : _lightThemeBase;
+  static ThemeData get appLightTheme => isNaskhLanguage
+      ? (_lightThemeNaskh ??= _withNaskh(lightTheme))
+      : lightTheme;
 
-  static ThemeData get darkTheme => isNaskhLanguage
-      ? (_darkThemeNaskh ??= _withNaskh(_darkThemeBase))
-      : _darkThemeBase;
+  static ThemeData get appDarkTheme => isNaskhLanguage
+      ? (_darkThemeNaskh ??= _withNaskh(darkTheme))
+      : darkTheme;
 
   static ThemeMode getThemeModePreference() {
     return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
