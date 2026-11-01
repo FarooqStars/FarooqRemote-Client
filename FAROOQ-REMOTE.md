@@ -24,6 +24,7 @@ by the workflow below.
 | `flutter/windows/runner/Runner.rc` | Company / product / description / copyright strings. |
 | `flutter/android/app/src/main/AndroidManifest.xml` | App label "Farooq Remote". |
 | `res/*`, `flutter/assets/icon.svg`, `flutter/windows/runner/resources/app_icon.ico`, Android mipmaps, `flutter/macos/Runner/AppIcon.icns`, iOS AppIcon set | Farooq Remote icons. |
+| `flutter/assets/logo.png` (new, 1.1.3), `res/farooq-branding/make_banner.py` | The owner's banner (icon + name on teal) at the top of the main window. |
 | `.github/workflows/farooqremote-windows.yml` (new) | Windows x64 build (manual trigger). |
 
 Everything else is upstream, byte for byte. Upstream workflows are left in place but
@@ -82,6 +83,15 @@ The exe is unsigned: Windows SmartScreen shows "unknown publisher" → *More inf
 * The login window has **Create account** and **Forgot password?** — they open
   `<account server>/_admin/#/register` or `#/forgot` in the browser, in the app's language
   (`?lang=ur|ar|en`). The user-name box says «E-mail or user name».
+
+## 1.1.3 — the owner's banner in the main window (1 Nov 2026)
+
+* The owner sent his branding files «for icons and logos» and chose «the banner in the app window».
+  `flutter/assets/logo.png` = his `Installer-header-banner.jpg` (the white icon + «Farooq Remote» on
+  his teal) cut to a banner strip with rounded corners (`res/farooq-branding/make_banner.py`). Upstream's
+  `loadLogo()` shows `assets/logo.png` at the top of the left pane (at most 300 x 60) when the file exists —
+  no Dart change. The app icon and the tray icon stay as they are (made from the same branding files in
+  September by `res/farooq-branding/make_icons.py`).
 
 ## Never
 
