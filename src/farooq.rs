@@ -168,7 +168,7 @@ pub async fn easy_ticket(peer_id: &str, target_pk: &[u8]) -> Option<String> {
         "from": Config::get_id(),
         "pk": crate::encode64(target_pk),
     });
-    let v = easy_post(&url, &body, Some(&token)).await?;
+    let v = easy_post(&url, &body, Some(token.as_str())).await?;
     if v["easy"].as_bool() != Some(true) {
         return None;
     }
