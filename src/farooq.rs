@@ -20,6 +20,8 @@
 use hbb_common::{
     config::{keys, Config, LocalConfig, APP_NAME, DEFAULT_SETTINGS},
     log,
+    protobuf::Enum,
+    rendezvous_proto::{control_permissions::Permission, ControlPermissions},
     tls::TlsType,
 };
 use std::sync::Once;
@@ -85,6 +87,49 @@ pub const OPTION_EASY_ACCESS: &str = "fr-easy-access";
 /// The account (user name, lower case) chosen when easy access was ticked.
 pub const OPTION_EASY_OWNER: &str = "fr-easy-owner";
 const EASY_HTTP_TIMEOUT_MS: u64 = 6_000;
+
+/// Farooq Remote 1.1.7 (owner 2 Nov 2026: «set easy access with menu to select which part should accessible for easy
+/// access» — his choice: the work permissions): what a session that came in by easy access may do on this computer.
+/// «full» (or empty) = everything, «view» = only see the screen, «custom» = the switches below. These replace the general
+/// permissions for easy-access sessions only (Settings → Security → Password, under the easy-access box); sessions with
+/// a password keep the general ones.
+pub const OPTION_EASY_MODE: &str = "fr-easy-mode";
+/// «custom»: the option `fr-easy-perm-<name>` = "N" switches that permission off for easy-access sessions.
+pub const EASY_PERM_PREFIX: &str = "fr-easy-perm-";
+pub const EASY_PERMS: [(&str, Permission); 12] = [
+    ("keyboard", Permission::keyboard),
+    ("remote-printer", Permission::remote_printer),
+    ("clipboard", Permission::clipboard),
+    ("file", Permission::file),
+    ("audio", Permission::audio),
+    ("camera", Permission::camera),
+    ("terminal", Permission::terminal),
+    ("tunnel", Permission::tunnel),
+    ("restart", Permission::restart),
+    ("recording", Permission::recording),
+    ("block-input", Permission::block_input),
+    ("privacy-mode", Permission::privacy_mode),
+];
+
+/// The permissions of an easy-access session in the format of ControlPermissions (2 bits each: 1 = off, 2 = on), so the
+/// usual permission checks of src/server/connection.rs apply them.
+pub fn easy_control_permissions() -> ControlPermissions {
+    let mode = Config::get_option(OPTION_EASY_MODE);
+    let mut bits: u64 = 0;
+    for (name, p) in EASY_PERMS.iter() {
+        let on = match mode.as_str() {
+            "view" => false,
+            "custom" => Config::get_option(&format!("{}{}", EASY_PERM_PREFIX, name)) != "N",
+            _ => true,
+        };
+        let index = p.value() as u64;
+        bits |= (if on { 2u64 } else { 1u64 }) << (index * 2);
+    }
+    ControlPermissions {
+        permissions: bits,
+        ..Default::default()
+    }
+}
 
 /// Farooq Remote 1.1.6: upstream lets the account server change this computer's settings through the heartbeat answer
 /// («strategy», a RustDesk Server Pro feature). The Farooq Remote account server never sends one, and such an answer
@@ -171,6 +216,10 @@ pub async fn easy_ticket(peer_id: &str, target_pk: &[u8]) -> Option<String> {
     });
     let v = easy_post(&url, &body, Some(token.as_str())).await?;
     if v["easy"].as_bool() != Some(true) {
+        log::info!(
+            "easy access: no ticket for {} (not offered by the account server)",
+            peer_id
+        );
         return None;
     }
     let ticket = v["ticket"].as_str()?.to_owned();
@@ -201,18 +250,26 @@ pub async fn easy_check(ticket: &str, from_id: &str) -> bool {
         log::warn!("easy access: no answer from the account server");
         return false;
     };
-    let ok = v["ok"].as_bool() == Some(true)
-        && v["user"]
-            .as_str()
-            .map(|u| u.trim().to_lowercase() == owner)
-            .unwrap_or(false)
-        && v["from"].as_str() == Some(from_id)
-        && v["pk"].as_str() == Some(my_pk.as_str());
-    log::info!(
-        "easy access from {}: {}",
-        from_id,
-        if ok { "accepted" } else { "refused" }
-    );
+    let answered = v["ok"].as_bool() == Some(true);
+    let user_ok = v["user"]
+        .as_str()
+        .map(|u| u.trim().to_lowercase() == owner)
+        .unwrap_or(false);
+    let from_ok = v["from"].as_str() == Some(from_id);
+    let pk_ok = v["pk"].as_str() == Some(my_pk.as_str());
+    let ok = answered && user_ok && from_ok && pk_ok;
+    if ok {
+        log::info!("easy access from {}: accepted", from_id);
+    } else {
+        log::info!(
+            "easy access from {}: refused (ticket {}, account {}, computer {}, key {})",
+            from_id,
+            if answered { "valid" } else { "not valid" },
+            if user_ok { "ok" } else { "not the owner" },
+            if from_ok { "ok" } else { "other" },
+            if pk_ok { "ok" } else { "other" }
+        );
+    }
     ok
 }
 

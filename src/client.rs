@@ -1773,6 +1773,9 @@ pub struct LoginConfigHandler {
     /// Farooq Remote 1.1.6: the other computer's key, checked through the ID server, kept only while this connection is
     /// end-to-end encrypted (src/client/io_loop.rs); taken once by `handle_hash` for an easy-access ticket.
     pub fr_easy_pk: Option<Vec<u8>>,
+    /// Farooq Remote 1.1.7: when an easy-access ticket was sent and no answer has come yet (src/client/io_loop.rs: a refusal
+    /// falls back to the saved password; no answer in 15 s brings the password question).
+    pub fr_easy_sent: Option<std::time::Instant>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -3508,6 +3511,8 @@ pub async fn handle_hash(
     }
     // last password
     let mut password = lc.read().unwrap().password.clone();
+    // Farooq Remote 1.1.7: a password given on purpose for this connection (preset or shared) goes before easy access
+    let mut fr_explicit_password = !password_preset.is_empty();
     // preset password
     if password.is_empty() {
         if !password_preset.is_empty() {
@@ -3524,6 +3529,7 @@ pub async fn handle_hash(
     let shared_password = lc.write().unwrap().shared_password.take();
     if let Some(shared_password) = shared_password {
         if !shared_password.is_empty() {
+            fr_explicit_password = true;
             let mut hasher = Sha256::new();
             hasher.update(shared_password.clone());
             hasher.update(&hash.salt);
@@ -3570,15 +3576,20 @@ pub async fn handle_hash(
         return;
     }
 
-    // Farooq Remote 1.1.5: easy access — no saved password: ask the account server for a one-time ticket (only when signed
-    // in and the target allows it, see crate::farooq). The target answers with the session, or with «Empty Password»,
-    // which brings up the password question as before.
+    // Farooq Remote 1.1.5: easy access — ask the account server for a one-time ticket (only when signed in and the target
+    // allows it, see crate::farooq). The target answers with the session, or with «Empty Password».
     // 1.1.6: only on an end-to-end encrypted connection and once per connection (the key is taken), tied to the key of
     // the computer this connection really reaches.
+    // 1.1.7: tried before a saved password too (an old saved password no longer blocks it; owner 2 Nov 2026: «even easy
+    // access it ask you password»); if the target refuses the ticket, the saved password is sent instead
+    // (src/client/io_loop.rs), and only then the password question appears.
     let target_pk = lc.write().unwrap().fr_easy_pk.take();
     let target_pk = target_pk.filter(|pk| pk.len() == 32 && peer.is_secured());
-    if let (true, Some(target_pk)) = (password.is_empty(), target_pk) {
+    if let (false, Some(target_pk)) = (fr_explicit_password, target_pk) {
         let id = lc.read().unwrap().id.clone();
+        if !password.is_empty() {
+            log::info!("easy access: tried before the saved password for {}", id);
+        }
         if let Some(ticket) = crate::farooq::easy_ticket(&id, &target_pk).await {
             let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
             let (os_username, os_password) = if is_terminal {
@@ -3597,6 +3608,7 @@ pub async fn handle_hash(
                 lr.fr_ticket = ticket;
             }
             allow_err!(peer.send(&msg_out).await);
+            lc.write().unwrap().fr_easy_sent = Some(std::time::Instant::now());
             lc.write().unwrap().hash = hash;
             return;
         }

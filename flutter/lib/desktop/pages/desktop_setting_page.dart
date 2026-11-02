@@ -1340,8 +1340,80 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               : translate('fr-easy-access-tip'),
           style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
         ).marginOnly(left: 45, right: 10, bottom: 6),
+        if (on) _frEasyPerms(context, enabled),
       ],
     ).marginOnly(left: _kRadioLeftMargin, top: 6);
+  }
+
+  // Farooq Remote 1.1.7: what the owner's account may do on this computer when it comes in by easy access (owner 2 Nov
+  // 2026: «menu to select which part should accessible for easy access» — his choice: work permissions). fr-easy-mode =
+  // full (default, stored as '') / view / custom; custom: fr-easy-perm-<name> = 'N' switches one off. Read by
+  // src/farooq.rs easy_control_permissions(); sessions with a password keep the general Permissions card.
+  Widget _frEasyPerms(BuildContext context, bool enabled) {
+    String mode = bind.mainGetOptionSync(key: 'fr-easy-mode');
+    if (mode != 'view' && mode != 'custom') mode = 'full';
+    final perms = <List<String>>[
+      ['keyboard', 'Enable keyboard/mouse'],
+      if (isWindows) ['remote-printer', 'Enable remote printer'],
+      ['clipboard', 'Enable clipboard'],
+      ['file', 'Enable file transfer'],
+      ['audio', 'Enable audio'],
+      ['camera', 'Enable camera'],
+      ['terminal', 'Enable terminal'],
+      ['tunnel', 'Enable TCP tunneling'],
+      ['restart', 'Enable remote restart'],
+      ['recording', 'Enable recording session'],
+      if (isWindows) ['block-input', 'Enable blocking user input'],
+      if (bind.mainSupportedPrivacyModeImpls() != '[]')
+        ['privacy-mode', 'Enable privacy mode'],
+    ];
+    final style = TextStyle(
+        fontSize: _kContentFontSize,
+        color: disabledTextColor(context, enabled));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(translate('fr-easy-access-perms'), style: style)
+            .marginOnly(left: 45, right: 10, top: 2),
+        ComboBox(
+            keys: const ['full', 'view', 'custom'],
+            values: [
+              translate('Full Access'),
+              translate('Screen Share'),
+              translate('Custom'),
+            ],
+            enabled: enabled,
+            initialKey: mode,
+            onChanged: (v) async {
+              await bind.mainSetOption(
+                  key: 'fr-easy-mode', value: v == 'full' ? '' : v);
+              if (mounted) setState(() {});
+            }).marginOnly(left: 45, right: 10, top: 4, bottom: 4),
+        if (mode == 'custom')
+          ...perms.map((p) {
+            final key = 'fr-easy-perm-${p[0]}';
+            final value = bind.mainGetOptionSync(key: key) != 'N';
+            Future<void> toggleTo(bool v) async {
+              await bind.mainSetOption(key: key, value: v ? '' : 'N');
+              if (mounted) setState(() {});
+            }
+
+            return GestureDetector(
+              child: Row(
+                children: [
+                  Checkbox(
+                      value: value,
+                      onChanged: enabled ? (v) => toggleTo(v == true) : null),
+                  Expanded(
+                      child: Text(translate(p[1]), style: style)
+                          .marginOnly(left: 5)),
+                ],
+              ),
+              onTap: enabled ? () => toggleTo(!value) : null,
+            ).marginOnly(left: 45);
+          }),
+      ],
+    );
   }
 
   Widget more(BuildContext context) {

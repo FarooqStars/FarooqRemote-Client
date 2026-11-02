@@ -1323,6 +1323,45 @@ impl Connection {
         Ok(())
     }
 
+    /// Farooq Remote 1.1.7: an accepted easy-access ticket brings the permissions chosen for easy access instead of the
+    /// general ones (crate::farooq::easy_control_permissions, through the usual `control_permissions` of this session);
+    /// the other side is told about every permission that changes.
+    async fn fr_apply_easy_permissions(&mut self) {
+        let cp = Some(crate::farooq::easy_control_permissions());
+        let keyboard = Self::permission(keys::OPTION_ENABLE_KEYBOARD, &cp);
+        let clipboard = Self::permission(keys::OPTION_ENABLE_CLIPBOARD, &cp);
+        let audio = Self::permission(keys::OPTION_ENABLE_AUDIO, &cp);
+        let file = Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &cp);
+        let restart = Self::permission(keys::OPTION_ENABLE_REMOTE_RESTART, &cp);
+        let recording = Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &cp);
+        let block_input = Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &cp);
+        let privacy_mode = Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &cp);
+        let changes = [
+            (self.keyboard != keyboard, Permission::Keyboard, keyboard),
+            (self.clipboard != clipboard, Permission::Clipboard, clipboard),
+            (self.audio != audio, Permission::Audio, audio),
+            (self.file != file, Permission::File, file),
+            (self.restart != restart, Permission::Restart, restart),
+            (self.recording != recording, Permission::Recording, recording),
+            (self.block_input != block_input, Permission::BlockInput, block_input),
+            (self.privacy_mode != privacy_mode, Permission::PrivacyMode, privacy_mode),
+        ];
+        self.keyboard = keyboard;
+        self.clipboard = clipboard;
+        self.audio = audio;
+        self.file = file;
+        self.restart = restart;
+        self.recording = recording;
+        self.block_input = block_input;
+        self.privacy_mode = privacy_mode;
+        self.control_permissions = cp;
+        for (changed, permission, enabled) in changes {
+            if changed {
+                self.send_permission(permission, enabled).await;
+            }
+        }
+    }
+
     async fn send_permission(&mut self, permission: Permission, enabled: bool) {
         let mut misc = Misc::new();
         misc.set_permission_info(PermissionInfo {
@@ -2529,6 +2568,22 @@ impl Connection {
                 return true;
             }
             self.reset_session_scope_for_login();
+            // Farooq Remote 1.1.7: an easy-access ticket is checked once, here, before the session-type checks below, so
+            // an accepted ticket brings the permissions chosen for easy access (crate::farooq::easy_control_permissions).
+            // The decision itself is made further down, in the same place as before (after approve mode and recent
+            // session). Counted like a password try.
+            let mut fr_easy: Option<(bool, ((i32, i32, i32), i32))> = None;
+            if !lr.fr_ticket.is_empty() {
+                let (failure, res) = self.check_failure(0).await;
+                if !res {
+                    return true;
+                }
+                let ok = crate::farooq::easy_check(&lr.fr_ticket, &lr.my_id).await;
+                if ok {
+                    self.fr_apply_easy_permissions().await;
+                }
+                fr_easy = Some((ok, failure));
+            }
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
                     if !Self::permission(
@@ -2703,15 +2758,12 @@ impl Connection {
                 } else {
                     self.send_login_error(err_msg).await;
                 }
-            } else if !lr.fr_ticket.is_empty() {
+            } else if let Some((fr_easy_ok, failure)) = fr_easy {
                 // Farooq Remote 1.1.5: easy access — the owner's own account (see crate::farooq::easy_check); anything
-                // else gets «Empty Password», so the other side asks for the password as before.
-                // 1.1.6: counted like a password try (too many wrong tries from one address are stopped the same way)
-                let (failure, res) = self.check_failure(0).await;
-                if !res {
-                    return true;
-                }
-                if crate::farooq::easy_check(&lr.fr_ticket, &lr.my_id).await {
+                // else gets «Empty Password», so the other side uses its saved password or asks for one, as before.
+                // 1.1.6: counted like a password try (too many wrong tries from one address are stopped the same way).
+                // 1.1.7: the ticket was checked above (once), before the session-type checks.
+                if fr_easy_ok {
                     self.update_failure(failure, true, 0);
                     self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::FarooqEasyAccess);
                     if err_msg.is_empty() {

@@ -28,6 +28,7 @@ by the workflow below.
 | `src/client.rs` (one line in `_start_inner`), `src/farooq.rs` | 1.1.4: the account token is not sent to the open-source ID server, so a logged-in app connects (no wait for a key exchange the server never sends). |
 | `src/farooq.rs` (easy_*), `src/client.rs` (`handle_hash`), `src/server/connection.rs` (login), `src/hbbs_http/sync.rs` (heartbeat), `desktop_setting_page.dart`, `src/lang/{en,ur,ar}.rs`, workflow step for `message.proto` | 1.1.5: easy access — the owner's own account connects without a password (see «1.1.5» below). |
 | `src/farooq.rs` (`easy_post`, `ACCEPT_SERVER_STRATEGY`), `src/client.rs` (`fr_easy_pk`), `src/client/io_loop.rs`, `src/server/connection.rs`, `src/hbbs_http/sync.rs`, `src/hbbs_http/http_client.rs` + `src/hbbs_http.rs` (`create_http_client_async_no_redirect`), `src/lang/{en,ur,ar}.rs` | 1.1.6: easy access after a security review — strict https, the ticket tied to the encrypted session, wrong tickets counted, heartbeat «strategy» ignored (see «1.1.6» below). |
+| `src/farooq.rs` (`easy_control_permissions`), `src/server/connection.rs` (`fr_apply_easy_permissions`, the ticket checked once before the session-type checks), `src/client.rs` (`fr_easy_sent`, easy access before a saved password), `src/client/io_loop.rs` (saved-password fallback, 15 s), `desktop_setting_page.dart` (`_frEasyPerms`), `src/lang/{en,ur,ar}.rs` | 1.1.7: what easy access may do (Full Access / Screen Share / Custom), easy access tried before a saved password (see «1.1.7» below). |
 | `.github/workflows/farooqremote-windows.yml` (new) | Windows x64 build (manual trigger). |
 
 Everything else is upstream, byte for byte. Upstream workflows are left in place but
@@ -157,6 +158,33 @@ A review of 1.1.5 (before it was given to anyone) found ways around easy access;
 * Build note: `LoginRequest.fr_ticket` (field 99) is added to `libs/hbb_common/protos/message.proto` only by the step
   in `.github/workflows/farooqremote-windows.yml`; any other build (Linux, Android, a local `cargo check`) must run the
   same step first. Upstream's ci.yml / flutter-ci.yml run only for `master` and pull requests, so they are not affected.
+
+## 1.1.7 — what easy access may do; easy access before a saved password (2 Nov 2026)
+
+* The owner's test on 4 PCs (2 Nov 06:26): easy access still asked for a password, and Home 2 stayed on «connecting».
+  Claude's own test from HOME-01 (computer use, his yes): Home 2, Office and Duty office open together in three tabs;
+  Home 2 and Duty office (no saved password) came in by easy access. **The cause on Home 2: the official RustDesk 1.4.9
+  from the September tests was still installed and running there** (service «RustDesk», `custom-rendezvous-server` =
+  our ID server). Both programs register the same ID (the ID comes from the machine), so the ID server sometimes sends a
+  connection to the old RustDesk: it ignores the ticket and waits for a click (the controller stays on «connecting») or
+  asks its own password. Office and Duty office have only Farooq Remote. Fix: remove RustDesk from Home 2.
+* **What easy access may do** (owner: «set easy access with menu to select which part should accessible for easy
+  access» — his choice: the work permissions). Under the easy-access box: Full Access (default) / Screen Share / Custom
+  with the same switches as the Permissions card (keyboard and mouse, remote printer, clipboard, file transfer, audio,
+  camera, terminal, TCP tunneling, remote restart, recording, blocking input, privacy mode). Options `fr-easy-mode`
+  (`""`/`full`, `view`, `custom`) and `fr-easy-perm-<name>` = `N`. They replace the general permissions for easy-access
+  sessions only: the computer checks the ticket once at the start of the login (before the file-transfer / camera /
+  terminal / tunnel checks) and, when it is accepted, gives the session `control_permissions` built by
+  `crate::farooq::easy_control_permissions()` and tells the other side every permission that changes. Sessions with a
+  password keep the general Permissions card.
+* **Easy access before a saved password**: a signed-in app tries the ticket first even when a password is saved (an old
+  saved password no longer blocks easy access); a password given on purpose for the connection (preset / shared) still
+  goes first. If the other computer refuses the ticket, the saved password is sent at once
+  (`client::handle_login_from_ui`), and only without one the password question appears. If no answer comes within
+  15 s (an older program that waits for a click), the password question appears instead of «connecting» for ever.
+* Clearer log lines: «no ticket … (not offered by the account server)», «tried before the saved password», and on the
+  computer being reached which check refused a ticket (ticket, account, computer, key).
+* Server: unchanged (accounts 2.7-10).
 
 ## Never
 

@@ -284,5 +284,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("fr-easy-access-tip", "Your other computers signed in to the same Farooq Remote account connect to this one without its password, as long as this computer also stays signed in to that account. Everyone else still needs the password."),
         ("fr-easy-access-account", "Account"),
         ("fr-easy-access-login-first", "Log in to your account first (Settings → Account), then tick easy access."),
+        ("fr-easy-access-perms", "What your account may do on this computer by easy access"),
     ].iter().cloned().collect();
 }

@@ -32,7 +32,7 @@ env:
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.9"
   # Farooq Remote product version stamped on the output file name
-  FR_VERSION: "1.1.6"
+  FR_VERSION: "1.1.7"
   # Server facts (must match src/farooq.rs)
   FR_ID_SERVER: "remote.farooqmughal.net"
   FR_PUB_KEY: "11rU8HpBVbadu59plPSdMpFvkaJ2amnfcB+rJlZ2EWs="

@@ -300,6 +300,22 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _ = status_timer.tick() => {
+                            // Farooq Remote 1.1.7: an easy-access ticket that gets no answer (an older program on the
+                            // other computer that waits for a click) — the password question after 15 s, not
+                            // «connecting» for ever
+                            let fr_easy_waited = self
+                                .handler
+                                .lc
+                                .read()
+                                .unwrap()
+                                .fr_easy_sent
+                                .map(|t| t.elapsed() >= std::time::Duration::from_secs(15))
+                                .unwrap_or(false);
+                            if fr_easy_waited {
+                                self.handler.lc.write().unwrap().fr_easy_sent = None;
+                                log::info!("easy access: no answer in 15 s; asking for the password");
+                                self.handler.msgbox("input-password", "Password Required", "", "");
+                            }
                             if self.handler.is_restarting_remote_device()
                                 && last_recv_time.elapsed() >= RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT
                             {
@@ -1363,6 +1379,35 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
+                        // Farooq Remote 1.1.7: the other computer refused our easy-access ticket — send the saved
+                        // password, if there is one, before asking (crate::client::handle_hash tried the ticket first)
+                        let fr_easy_sent = self.handler.lc.write().unwrap().fr_easy_sent.take();
+                        if fr_easy_sent.is_some()
+                            && err == client::LOGIN_MSG_PASSWORD_EMPTY
+                            && !self.handler.lc.read().unwrap().password.is_empty()
+                        {
+                            log::info!("easy access refused by the other computer; using the saved password");
+                            let is_terminal = self.handler.lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
+                            let (os_username, os_password) = if is_terminal {
+                                ("".to_owned(), "".to_owned())
+                            } else {
+                                (
+                                    self.handler.lc.read().unwrap().get_option("os-username"),
+                                    self.handler.lc.read().unwrap().get_option("os-password"),
+                                )
+                            };
+                            let remember = self.handler.lc.read().unwrap().remember;
+                            client::handle_login_from_ui(
+                                self.handler.lc.clone(),
+                                os_username,
+                                os_password,
+                                String::new(),
+                                remember,
+                                peer,
+                            )
+                            .await;
+                            return true;
+                        }
                         if err == client::REQUIRE_2FA {
                             self.handler.lc.write().unwrap().enable_trusted_devices =
                                 lr.enable_trusted_devices;
@@ -1372,6 +1417,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
+                        self.handler.lc.write().unwrap().fr_easy_sent = None;
                         let peer_version = pi.version.clone();
                         let peer_platform = pi.platform.clone();
                         self.set_peer_info(&pi);
