@@ -30,6 +30,7 @@ by the workflow below.
 | `src/farooq.rs` (`easy_post`, `ACCEPT_SERVER_STRATEGY`), `src/client.rs` (`fr_easy_pk`), `src/client/io_loop.rs`, `src/server/connection.rs`, `src/hbbs_http/sync.rs`, `src/hbbs_http/http_client.rs` + `src/hbbs_http.rs` (`create_http_client_async_no_redirect`), `src/lang/{en,ur,ar}.rs` | 1.1.6: easy access after a security review — strict https, the ticket tied to the encrypted session, wrong tickets counted, heartbeat «strategy» ignored (see «1.1.6» below). |
 | `src/farooq.rs` (`easy_control_permissions`), `src/server/connection.rs` (`fr_apply_easy_permissions`, the ticket checked once before the session-type checks), `src/client.rs` (`fr_easy_sent`, easy access before a saved password), `src/client/io_loop.rs` (saved-password fallback, 15 s), `desktop_setting_page.dart` (`_frEasyPerms`), `src/lang/{en,ur,ar}.rs` | 1.1.7: what easy access may do (Full Access / Screen Share / Custom), easy access tried before a saved password (see «1.1.7» below). |
 | `src/farooq.rs` (`FR_VERSION`, update check, `peer_version_note`, `WHY_*`, `rustdesk_installed`), `src/common.rs`, `src/ui_interface.rs`, `src/flutter_ffi.rs`, `src/platform/windows.rs`, `src/hbbs_http/{sync,http_client}.rs`, `src/server/connection.rs`, `src/client.rs`, `src/client/io_loop.rs`, `src/lang.rs`, `src/lang/{en,ur,ar}.rs`, `flutter/lib/common.dart`, `desktop_home_page.dart`, `desktop_setting_page.dart`, `common/widgets/dialog.dart`, `models/model.dart`, workflow step «one version number» | 1.1.8: one version number everywhere, the app looks for a newer version on the site and asks, clear messages when versions differ or easy access is not used (see «1.1.8» below). |
+| `src/farooq.rs` (settings folders, `has_earlier_settings`, `delete_settings_cmds`, `ask_keep_settings_on_uninstall`, `resend_key_once_per_version`), `src/platform/windows.rs` (`install_me` option `fr-reset`, `uninstall_me`), `src/rendezvous_mediator.rs` (`start_all`), `src/flutter_ffi.rs`, `flutter/lib/desktop/pages/install_page.dart`, `src/lang/{en,ur,ar}.rs` | 1.1.9: «keep the settings?» when installing and uninstalling; the key goes to the ID server again after each new version (see «1.1.9» below). |
 | `.github/workflows/farooqremote-windows.yml` (new) | Windows x64 build (manual trigger). |
 
 Everything else is upstream, byte for byte. Upstream workflows are left in place but
@@ -226,6 +227,35 @@ A review of 1.1.5 (before it was given to anyone) found ways around easy access;
   local option `fr-show-rustdesk-card` = `N`).
 * `src/lang.rs`: texts of our own keys (`fr-…`) keep the word RustDesk (upstream replaces it with the app name).
 * Server: unchanged (accounts 2.7-10). Site: `farooqremote/version.json` + pages for 1.1.8.
+
+## 1.1.9 — keep the settings or not; the key again after each version (2 Nov 2026)
+
+* Owner, 2 Nov 20:41, after removing the old RustDesk from Home 2 («this is the main cause, now it is working»): «i need
+  when install or uninstall App ask you do you want keep setting with password yes/or No», «i have 1 error red explain me
+  what is this and how to remove it» (the Home 2 tab: red shield, «Direct and unencrypted connection (TCP)»), and a new
+  build, then installing it together on his PC with pictures for a proper guide.
+* **Where the settings are.** Upstream never removes them on uninstall, so a new installation brought them back: the
+  service's config (ID, key, permanent password, options such as easy access) in
+  `%SystemRoot%\ServiceProfiles\LocalService\AppData\Roaming\FarooqRemote\config`, and each user's config (account
+  sign-in, saved passwords of other computers, language) in `%APPDATA%\FarooqRemote\config`; at installation the
+  user's config is also imported into the service (`--import-config`).
+* **Uninstall** (Windows «Apps» or the Start-menu shortcut, both `FarooqRemote.exe --uninstall`): a Windows question box
+  in the app's language (RTL for Urdu/Arabic): Yes = keep, No = the uninstall script also deletes both folders (after the
+  programs are stopped), Cancel = nothing happens. `crate::farooq::ask_keep_settings_on_uninstall`,
+  `delete_settings_cmds` (only folders named `…\FarooqRemote\config`; paths with `"` or `%` are refused).
+* **Install** (the install page, also used for upgrades): when settings are already there (`has_earlier_settings`: the
+  app's uninstall key, the service folder — «yes» when it can not be looked into —, an account sign-in or saved
+  computers), «Keep the settings?» Yes / No / Cancel. No adds `fr-reset` to the options: the script deletes both
+  folders right after the old programs are stopped and does not import the old config; the new service starts like new
+  (new key; the ID is normally the same, it comes from the machine).
+* **The key again after each version** (`resend_key_once_per_version`, called at the start of
+  `RendezvousMediator::start_all`): a computer sends its key to the ID server only the first time (`key_confirmed`). On
+  Home 2 the old RustDesk with the same ID left its own key there, so every connection to Home 2 stayed unencrypted (red
+  shield; «Insecure connection» when the controller checks). Now `key_confirmed` is cleared once per version
+  (option `fr-key-sent-version`), and the ID server takes the key again (same uuid and address). Note: if the address
+  had changed since the old key was stored, the ID server answers UUID_MISMATCH and upstream gives the computer a new ID
+  (it is still bound to the account through the login history).
+* The install page's licence link now opens our terms (`/farooqremote/terms/`) instead of rustdesk.com.
 
 ## Never
 

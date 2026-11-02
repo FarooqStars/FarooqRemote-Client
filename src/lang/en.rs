@@ -303,5 +303,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("fr-update-later", "Later"),
         ("fr-rustdesk-installed-title", "RustDesk is also installed here"),
         ("fr-rustdesk-installed-tip", "If RustDesk is set to the Farooq Remote server, both programs have the same ID and connections reach either of them at random («Insecure connection», endless «Connecting…», a password question). If you no longer use RustDesk, uninstall it: Windows Settings → Apps → RustDesk."),
+        ("fr-keep-settings-title", "Keep the settings?"),
+        ("fr-keep-settings-install-tip", "This computer already has Farooq Remote settings: the permanent password, the account sign-in, easy access, the saved passwords of other computers and the other settings.\n\nYes — keep them (the usual choice for an update).\nNo — delete them: the installation starts like new, and you sign in and set a password again. The ID usually stays the same."),
+        ("fr-keep-settings-yes", "Yes, keep"),
+        ("fr-keep-settings-no", "No, delete"),
+        ("fr-uninstall-title", "Uninstall Farooq Remote"),
+        ("fr-uninstall-keep-tip", "Keep this computer's Farooq Remote settings?\n\nYes — keep them: a later installation continues with the same ID, permanent password, account sign-in, easy access and saved passwords.\nNo — delete them all.\nCancel — do not uninstall."),
     ].iter().cloned().collect();
 }

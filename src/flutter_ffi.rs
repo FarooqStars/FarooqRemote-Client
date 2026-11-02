@@ -2851,6 +2851,9 @@ pub fn main_get_common(key: String) -> String {
     } else if key == "fr-base-version" {
         // Farooq Remote 1.1.8: the RustDesk version this build is based on (About)
         return crate::VERSION.to_owned();
+    } else if key == "fr-has-earlier-settings" {
+        // Farooq Remote 1.1.9: the install page asks «keep the settings?» only when there are some
+        return crate::farooq::has_earlier_settings().to_string();
     } else if key == "fr-rustdesk-installed" {
         // Farooq Remote 1.1.8: RustDesk itself is installed here (home page card, crate::farooq::rustdesk_installed)
         return crate::farooq::rustdesk_installed().to_string();

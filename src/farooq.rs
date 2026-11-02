@@ -43,7 +43,7 @@ pub const APP_DISPLAY_NAME: &str = "FarooqRemote";
 /// it with other computers; everything a person sees shows this number instead: About, Windows «Apps» (DisplayVersion),
 /// the exe's file version, the installer's file name and the release tag (the Windows workflow reads it from this line
 /// and stops when a release tag does not match), and the site (version.json and the download pages).
-pub const FR_VERSION: &str = "1.1.8";
+pub const FR_VERSION: &str = "1.1.9";
 
 /// Farooq Remote public ID server (hbbs) — the company domain (1.1.0, owner 1 Nov 2026:
 /// «we will use now farooqmughal.net for everything»); remote.farooqmughal.net → the Oracle VM.
@@ -529,6 +529,125 @@ pub fn rustdesk_installed() -> bool {
     }
     #[cfg(not(windows))]
     false
+}
+
+/// Farooq Remote 1.1.9 (owner 2 Nov 2026 20:41: «when install or uninstall App ask you do you want keep setting with
+/// password yes/or No»). The settings live outside the program folder, so uninstalling (upstream) never removed them and
+/// a new installation brought them back: the service's config (ID, key, permanent password, options such as easy access)
+/// in %SystemRoot%\ServiceProfiles\LocalService\AppData\Roaming\FarooqRemote\config, and each user's config (account
+/// sign-in, saved passwords of other computers, language) in %APPDATA%\FarooqRemote\config. Now the uninstaller asks
+/// (Yes = keep, No = delete both, Cancel = stop), and the install page asks when settings are already there (No = the
+/// installation starts like new: the old ones are deleted and not imported).
+pub const INSTALL_OPTION_RESET: &str = "fr-reset";
+
+/// The service's settings folder.
+pub fn service_settings_dir() -> std::path::PathBuf {
+    let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_owned());
+    std::path::Path::new(&root)
+        .join("ServiceProfiles")
+        .join("LocalService")
+        .join("AppData")
+        .join("Roaming")
+        .join(APP_NAME.read().unwrap().as_str())
+        .join("config")
+}
+
+/// This user's settings folder (the folder of the running app's own config file).
+pub fn user_settings_dir() -> Option<std::path::PathBuf> {
+    Config::file().parent().map(|p| p.to_path_buf())
+}
+
+/// Are there settings from an earlier or the current installation? When it can not be told (a folder the user may not
+/// look into), «yes», so the install page rather asks once too often than deletes without asking.
+pub fn has_earlier_settings() -> bool {
+    #[cfg(windows)]
+    {
+        use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
+        let key = format!(
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
+            APP_NAME.read().unwrap()
+        );
+        if RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(key).is_ok() {
+            return true;
+        }
+        match std::fs::metadata(service_settings_dir()) {
+            Ok(_) => return true,
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return true,
+            _ => {}
+        }
+    }
+    !LocalConfig::get_option("access_token").is_empty()
+        || !hbb_common::config::PeerConfig::peers(None).is_empty()
+}
+
+/// The lines of the (elevated) install / uninstall script that delete the settings; empty when a path is not usable.
+pub fn delete_settings_cmds() -> String {
+    let mut dirs = vec![service_settings_dir()];
+    if let Some(d) = user_settings_dir() {
+        dirs.push(d);
+    }
+    let mut out = String::new();
+    for d in dirs {
+        let s = d.to_string_lossy().to_string();
+        // only a folder named "config" inside a «FarooqRemote» folder, and nothing a script could misread
+        let name_ok = s.ends_with(&format!("\\{}\\config", APP_NAME.read().unwrap()));
+        if !name_ok || s.contains('"') || s.contains('%') || s.len() < 10 {
+            log::warn!("settings folder not deleted (unexpected path): {}", s);
+            continue;
+        }
+        out.push_str(&format!("\nif exist \"{s}\" rd /s /q \"{s}\"\n"));
+    }
+    out
+}
+
+/// What the person chose when uninstalling.
+#[derive(Debug, PartialEq)]
+pub enum KeepSettings {
+    Keep,
+    Delete,
+    Cancel,
+}
+
+/// Asks, in the app's language, whether to keep this computer's settings (Windows question box: Yes / No / Cancel).
+#[cfg(windows)]
+pub fn ask_keep_settings_on_uninstall() -> KeepSettings {
+    use winapi::um::winuser::{
+        MessageBoxW, IDCANCEL, IDNO, MB_ICONQUESTION, MB_RIGHT, MB_RTLREADING, MB_SETFOREGROUND,
+        MB_TOPMOST, MB_YESNOCANCEL,
+    };
+    let lang = ui_lang();
+    let text = crate::lang::translate("fr-uninstall-keep-tip".to_owned());
+    let caption = crate::lang::translate("fr-uninstall-title".to_owned());
+    let w = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (text, caption) = (w(text.as_str()), w(caption.as_str()));
+    let mut flags = MB_YESNOCANCEL | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND;
+    if lang == "ur" || lang == "ar" {
+        flags |= MB_RTLREADING | MB_RIGHT;
+    }
+    let r = unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), flags) };
+    let choice = if r == IDNO {
+        KeepSettings::Delete
+    } else if r == IDCANCEL || r == 0 {
+        KeepSettings::Cancel
+    } else {
+        KeepSettings::Keep
+    };
+    log::info!("uninstall: settings {:?}", choice);
+    choice
+}
+
+/// Farooq Remote 1.1.9 (owner 2 Nov 2026 20:41, the red shield of Home 2: «Direct and unencrypted connection»): a
+/// computer sends its key to the ID server only the first time, so after another program with the same ID (the old
+/// RustDesk on Home 2) the ID server kept that program's key, and every connection to the computer stayed unencrypted
+/// («Insecure connection»). Now the key is sent again once after each new version. The ID server keeps it when it comes
+/// from the same computer and network (same uuid and address).
+pub fn resend_key_once_per_version() {
+    const SENT: &str = "fr-key-sent-version";
+    if Config::get_option(SENT) != FR_VERSION {
+        Config::set_key_confirmed(false);
+        Config::set_option(SENT.to_owned(), FR_VERSION.to_owned());
+        log::info!("the key goes to the ID server again ({})", FR_VERSION);
+    }
 }
 
 static APPLIED: Once = Once::new();

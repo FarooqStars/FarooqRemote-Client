@@ -114,6 +114,9 @@ impl RendezvousMediator {
     }
 
     pub async fn start_all() {
+        // Farooq Remote 1.1.9: send this computer's key to the ID server again once after each new version, so a key left
+        // there by another program with the same ID is replaced (crate::farooq::resend_key_once_per_version)
+        crate::farooq::resend_key_once_per_version();
         crate::test_nat_type();
         if config::is_outgoing_only() {
             loop {

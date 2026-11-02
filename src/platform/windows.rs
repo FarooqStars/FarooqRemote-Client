@@ -1553,7 +1553,21 @@ fn get_after_install(
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall(false, false);
+    // Farooq Remote 1.1.9: «No» to «keep the settings?» on the install page — the old settings are deleted once the old
+    // programs have stopped, and they are not imported into the new installation (crate::farooq).
+    let fr_reset = options.contains(crate::farooq::INSTALL_OPTION_RESET);
+    if fr_reset {
+        log::info!("install: the settings of this computer will be deleted (owner's choice)");
+    }
+    let uninstall_str = if fr_reset {
+        format!(
+            "{}{}",
+            get_uninstall(false, false),
+            crate::farooq::delete_settings_cmds()
+        )
+    } else {
+        get_uninstall(false, false)
+    };
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
     let mut exe = exe;
@@ -1743,7 +1757,11 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
         sleep = if debug { "timeout 300" } else { "" },
         dels = if debug { "" } else { &dels },
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
-        import_config = get_import_config(&exe),
+        import_config = if fr_reset {
+            "".to_owned()
+        } else {
+            get_import_config(&exe)
+        },
     );
     run_cmds(cmds, debug, "install")?;
     run_after_run_cmds(silent);
@@ -1834,7 +1852,16 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
-    run_cmds(get_uninstall(kill_self, true), true, "uninstall")
+    // Farooq Remote 1.1.9 (owner 2 Nov 2026: «when install or uninstall App ask you do you want keep setting with password
+    // yes/or No»): Yes keeps this computer's settings for a later installation, No deletes them after the programs have
+    // stopped, Cancel leaves everything as it is.
+    let mut cmds = get_uninstall(kill_self, true);
+    match crate::farooq::ask_keep_settings_on_uninstall() {
+        crate::farooq::KeepSettings::Cancel => return Ok(()),
+        crate::farooq::KeepSettings::Delete => cmds.push_str(&crate::farooq::delete_settings_cmds()),
+        crate::farooq::KeepSettings::Keep => {}
+    }
+    run_cmds(cmds, true, "uninstall")
 }
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {

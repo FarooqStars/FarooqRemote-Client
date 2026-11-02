@@ -186,10 +186,11 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                               .marginOnly(bottom: em),
                           InkWell(
                             hoverColor: Colors.transparent,
+                            // Farooq Remote 1.1.9: our own terms of use (it pointed at rustdesk.com)
                             onTap: () => launchUrlString(
-                                'https://rustdesk.com/privacy.html'),
+                                'https://www.farooqmughal.net/farooqremote/terms/'),
                             child: Tooltip(
-                              message: 'https://rustdesk.com/privacy.html',
+                              message: 'https://www.farooqmughal.net/farooqremote/terms/',
                               child: Row(children: [
                                 Icon(Icons.launch_outlined, size: 16)
                                     .marginOnly(right: 5),
@@ -250,18 +251,57 @@ class _InstallPageBodyState extends State<_InstallPageBody>
         ));
   }
 
-  void install() {
-    do_install() {
+  void install() async {
+    do_install(bool resetSettings) {
       btnEnabled.value = false;
       showProgress.value = true;
       String args = '';
       if (startmenu.value) args += ' startmenu';
       if (desktopicon.value) args += ' desktopicon';
       if (printer.value) args += ' printer';
+      // Farooq Remote 1.1.9: «No» to «keep the settings?» (crate::farooq::INSTALL_OPTION_RESET)
+      if (resetSettings) args += ' fr-reset';
       bind.installInstallMe(options: args, path: controller.text);
     }
 
-    do_install();
+    // Farooq Remote 1.1.9 (owner 2 Nov 2026: «when install or uninstall App ask you do you want keep setting with
+    // password yes/or No»): asked only when this computer already has settings
+    var resetSettings = false;
+    if (bind.mainGetCommonSync(key: 'fr-has-earlier-settings') == 'true') {
+      final keep = await _frAskKeepSettings();
+      if (keep == null) return;
+      resetSettings = !keep;
+    }
+    do_install(resetSettings);
+  }
+
+  /// true = keep, false = delete, null = cancel
+  Future<bool?> _frAskKeepSettings() {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(translate('fr-keep-settings-title')),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Text(translate('fr-keep-settings-install-tip')),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: Text(translate('Cancel')),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(translate('fr-keep-settings-no')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(translate('fr-keep-settings-yes')),
+          ),
+        ],
+      ),
+    );
   }
 
   void selectInstallPath() async {
