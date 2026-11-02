@@ -31,8 +31,8 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.9"
-  # Farooq Remote product version stamped on the output file name
-  FR_VERSION: "1.1.7"
+  # Farooq Remote product version: written ONLY in src/farooq.rs (FR_VERSION, 1.1.8); the step «one version number»
+  # reads it from there for the file name, the exe's file version and the release tag check.
   # Server facts (must match src/farooq.rs)
   FR_ID_SERVER: "remote.farooqmughal.net"
   FR_PUB_KEY: "11rU8HpBVbadu59plPSdMpFvkaJ2amnfcB+rJlZ2EWs="
@@ -66,6 +66,25 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+
+      - name: Farooq Remote - one version number (1.1.8)
+        # Owner 2 Nov 2026: «ver number is different in about, in file name, on site». src/farooq.rs FR_VERSION is the
+        # only place the product version is written: the app shows it (About, Windows Apps), the installer file is named
+        # with it, the exe's file version carries it (pubspec), and a release tag must be exactly v<that version>.
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          v=$(sed -n 's/^pub const FR_VERSION: &str = "\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)";.*$/\1/p' src/farooq.rs)
+          [ -n "$v" ] || { echo "FR_VERSION not found in src/farooq.rs"; exit 1; }
+          echo "Farooq Remote $v"
+          echo "FR_VERSION=$v" >> "$GITHUB_ENV"
+          if [ -n "$RELEASE_TAG" ] && [ "$RELEASE_TAG" != "v$v" ]; then
+            echo "release tag $RELEASE_TAG does not match v$v (src/farooq.rs)"; exit 1
+          fi
+          sed -i "s/^version: .*/version: $v+67/" flutter/pubspec.yaml
+          grep -n "^version:" flutter/pubspec.yaml
+          grep -q "^version: $v+67" flutter/pubspec.yaml || { echo "pubspec patch failed"; exit 1; }
 
       - name: Farooq Remote - point hbb_common fallback constants at our server
         # src/farooq.rs sets the editable defaults; this additionally replaces the

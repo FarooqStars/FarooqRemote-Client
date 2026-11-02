@@ -747,6 +747,10 @@ pub fn current_is_wayland() -> bool {
 
 #[inline]
 pub fn get_new_version() -> String {
+    // Farooq Remote 1.1.8: the newer version offered by www.farooqmughal.net (crate::farooq::start_update_check)
+    if crate::common::is_custom_client() {
+        return crate::farooq::new_version();
+    }
     (*SOFTWARE_UPDATE_URL
         .lock()
         .unwrap()

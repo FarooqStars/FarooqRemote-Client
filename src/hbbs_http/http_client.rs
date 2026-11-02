@@ -116,6 +116,32 @@ pub fn create_http_client_async_no_redirect(tls_type: TlsType) -> AsyncClient {
     configure_http_client!(builder, tls_type, false, AsyncClient)
 }
 
+/// Farooq Remote 1.1.8: the same client, following at most `max` redirects and only to https addresses on `hosts` (the
+/// update check of crate::farooq reads www.farooqmughal.net, which may send www <-> farooqmughal.net or add a slash).
+pub fn create_http_client_async_same_site(
+    tls_type: TlsType,
+    hosts: &'static [&'static str],
+    max: usize,
+) -> AsyncClient {
+    let policy = reqwest::redirect::Policy::custom(move |attempt| {
+        let ok = attempt.previous().len() <= max
+            && attempt.url().scheme() == "https"
+            && attempt.url().port().is_none()
+            && attempt
+                .url()
+                .host_str()
+                .map(|h| hosts.contains(&h))
+                .unwrap_or(false);
+        if ok {
+            attempt.follow()
+        } else {
+            attempt.stop()
+        }
+    });
+    let builder = AsyncClient::builder().redirect(policy);
+    configure_http_client!(builder, tls_type, false, AsyncClient)
+}
+
 pub fn get_url_for_tls<'a>(url: &'a str, proxy_conf: &'a Option<Socks5Server>) -> &'a str {
     if is_plain(url) {
         if let Some(conf) = proxy_conf {

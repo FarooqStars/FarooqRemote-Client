@@ -4119,8 +4119,68 @@ void checkUpdate() {
       Timer(const Duration(seconds: 1), () async {
         bind.mainGetSoftwareUpdateUrl();
       });
+    } else {
+      // Farooq Remote 1.1.8 (owner 2 Nov 2026: «if it is old version it should detect online if new version available
+      // ask user to update»): its own check against www.farooqmughal.net (crate::farooq::start_update_check). A newer
+      // version shows the card on the home page (desktop_home_page.dart) and is asked about once.
+      platformFFI.registerEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+          (Map<String, dynamic> evt) async {
+        if (evt['url'] is String) {
+          stateGlobal.updateUrl.value = evt['url'];
+          frAskUpdate();
+        }
+      });
+      Timer(const Duration(seconds: 3), () async {
+        bind.mainGetSoftwareUpdateUrl();
+      });
     }
   }
+}
+
+/// Farooq Remote 1.1.8: this app's version (crate::farooq::FR_VERSION).
+String get frAppVersion => bind.mainGetCommonSync(key: 'fr-version');
+
+/// Farooq Remote 1.1.8: the download page of the site in the app's language (never an address from the network).
+String frDownloadPage() {
+  final lang = MyTheme.effectiveLanguage;
+  if (lang.startsWith('ur')) {
+    return 'https://www.farooqmughal.net/ur/farooqremote/';
+  }
+  if (lang.startsWith('ar')) {
+    return 'https://www.farooqmughal.net/ar/farooqremote/';
+  }
+  return 'https://www.farooqmughal.net/farooqremote/';
+}
+
+/// Farooq Remote 1.1.8: asks once per new version whether to open the download page (the card stays on the home page).
+void frAskUpdate() {
+  if (!isDesktop) return;
+  final newVersion = bind.mainGetNewVersion();
+  if (newVersion.isEmpty) return;
+  const askedKey = 'fr-update-asked';
+  if (bind.mainGetLocalOption(key: askedKey) == newVersion) return;
+  bind.mainSetLocalOption(key: askedKey, value: newVersion);
+  final text = translate('fr-update-ask')
+      .replaceAll('{new}', newVersion)
+      .replaceAll('{mine}', frAppVersion);
+  gFFI.dialogManager.show((setState, close, context) {
+    download() {
+      close();
+      launchUrl(Uri.parse(frDownloadPage()));
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('fr-update-title')),
+      content: Text(text),
+      actions: [
+        dialogButton('fr-update-later', onPressed: close, isOutline: true),
+        dialogButton('Download', onPressed: download),
+      ],
+      onSubmit: download,
+      onCancel: close,
+    );
+  });
 }
 
 // https://github.com/flutter/flutter/issues/153560#issuecomment-2497160535

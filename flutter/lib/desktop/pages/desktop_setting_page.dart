@@ -544,7 +544,8 @@ class _GeneralState extends State<_General> {
             ),
           ),
       ],
-      if (!isWeb && !bind.isCustomClient())
+      // Farooq Remote 1.1.8: our app checks www.farooqmughal.net, so the switch is shown here too
+      if (!isWeb)
         _OptionCheckBox(
           context,
           'Check for software update on startup',
@@ -2538,18 +2539,22 @@ class _AboutState extends State<_About> {
   Widget build(BuildContext context) {
     return futureBuilder(future: () async {
       final license = await bind.mainGetLicense();
+      // Farooq Remote 1.1.8: the product's version (crate::farooq::FR_VERSION); the RustDesk base in the box below
       final version = await bind.mainGetVersion();
       final buildDate = await bind.mainGetBuildDate();
       final fingerprint = await bind.mainGetFingerprint();
+      final baseVersion = bind.mainGetCommonSync(key: 'fr-base-version');
       return {
         'license': license,
         'version': version,
         'buildDate': buildDate,
-        'fingerprint': fingerprint
+        'fingerprint': fingerprint,
+        'baseVersion': baseVersion
       };
     }(), hasData: (data) {
       final license = data['license'].toString();
       final version = data['version'].toString();
+      final baseVersion = data['baseVersion'].toString();
       final buildDate = data['buildDate'].toString();
       final fingerprint = data['fingerprint'].toString();
       const linkStyle = TextStyle(decoration: TextDecoration.underline);
@@ -2611,7 +2616,7 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Farooq Remote — developed by Mohammad Farooq\nwww.farooqmughal.net · downloads: www.farooqmughal.net/farooqremote\n\nBased on RustDesk. Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license\nSource: github.com/FarooqStars/FarooqRemote-Client',
+                            'Farooq Remote — developed by Mohammad Farooq\nwww.farooqmughal.net · downloads: www.farooqmughal.net/farooqremote\n\nBased on RustDesk $baseVersion. Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license\nSource: github.com/FarooqStars/FarooqRemote-Client',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(

@@ -226,8 +226,10 @@ pub fn translate_locale(name: String, locale: &str) -> String {
             s = s.replace("{}", &value);
         }
         if !crate::is_rustdesk() {
+            // Farooq Remote 1.1.8: our own texts ("fr-…") mean RustDesk itself when they say RustDesk
             if s.contains("RustDesk")
                 && !name.starts_with("upgrade_rustdesk_server_pro")
+                && !name.starts_with("fr-")
                 && name != "powered_by_me"
             {
                 let app_name = crate::get_app_name();

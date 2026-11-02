@@ -941,6 +941,11 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 
 pub fn check_software_update() {
     if is_custom_client() {
+        // Farooq Remote 1.1.8: its own check against www.farooqmughal.net (crate::farooq::start_update_check)
+        let opt = LocalConfig::get_option(keys::OPTION_ENABLE_CHECK_UPDATE);
+        if config::option2bool(keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
+            crate::farooq::start_update_check();
+        }
         return;
     }
     let opt = LocalConfig::get_option(keys::OPTION_ENABLE_CHECK_UPDATE);

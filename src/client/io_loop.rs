@@ -314,7 +314,13 @@ impl<T: InvokeUiSession> Remote<T> {
                             if fr_easy_waited {
                                 self.handler.lc.write().unwrap().fr_easy_sent = None;
                                 log::info!("easy access: no answer in 15 s; asking for the password");
-                                self.handler.msgbox("input-password", "Password Required", "", "");
+                                // 1.1.8: with the reason (crate::farooq::WHY_NO_ANSWER)
+                                self.handler.msgbox(
+                                    "input-password",
+                                    "Password Required",
+                                    crate::farooq::WHY_NO_ANSWER,
+                                    "",
+                                );
                             }
                             if self.handler.is_restarting_remote_device()
                                 && last_recv_time.elapsed() >= RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT
@@ -1408,6 +1414,18 @@ impl<T: InvokeUiSession> Remote<T> {
                             .await;
                             return true;
                         }
+                        // 1.1.8: refused and no saved password — the password question says why
+                        if fr_easy_sent.is_some() && err == client::LOGIN_MSG_PASSWORD_EMPTY {
+                            log::info!("easy access refused by the other computer; asking for the password");
+                            self.handler.lc.write().unwrap().password = Default::default();
+                            self.handler.msgbox(
+                                "input-password",
+                                "Password Required",
+                                crate::farooq::WHY_REFUSED,
+                                "",
+                            );
+                            return true;
+                        }
                         if err == client::REQUIRE_2FA {
                             self.handler.lc.write().unwrap().enable_trusted_devices =
                                 lr.enable_trusted_devices;
@@ -1417,7 +1435,20 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
-                        self.handler.lc.write().unwrap().fr_easy_sent = None;
+                        // Farooq Remote 1.1.8: easy access let us in — remember it for this computer, so a later password
+                        // question there says why easy access was not used (crate::farooq::PEER_EASY_OK)
+                        let fr_easy_logon = self.handler.lc.write().unwrap().fr_easy_sent.take().is_some();
+                        if fr_easy_logon {
+                            self.handler.lc.write().unwrap().set_option(
+                                crate::farooq::PEER_EASY_OK.to_owned(),
+                                "Y".to_owned(),
+                            );
+                        }
+                        // Farooq Remote 1.1.8 (owner 2 Nov 2026: «if your App build does not match … it should give
+                        // clear message»): the other computer runs another Farooq Remote version — say so, once for each
+                        // pair of versions
+                        let fr_peer_version = crate::farooq::peer_fr_version(&pi.platform_additions);
+                        let fr_version_note = crate::farooq::peer_version_note(&fr_peer_version);
                         let peer_version = pi.version.clone();
                         let peer_platform = pi.platform.clone();
                         self.set_peer_info(&pi);
@@ -1434,6 +1465,22 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         self.handler.handle_peer_info(pi);
+                        if let Some((title, text, link)) = fr_version_note {
+                            let pair = format!("{}|{}", fr_peer_version, crate::farooq::FR_VERSION);
+                            let noted = self
+                                .handler
+                                .lc
+                                .read()
+                                .unwrap()
+                                .get_option(crate::farooq::PEER_VERSION_NOTED);
+                            if noted != pair {
+                                self.handler.lc.write().unwrap().set_option(
+                                    crate::farooq::PEER_VERSION_NOTED.to_owned(),
+                                    pair,
+                                );
+                                self.handler.msgbox("custom-nocancel", title, &text, &link);
+                            }
+                        }
                         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
                         self.check_clipboard_file_context();
                         if self.handler.is_default() {

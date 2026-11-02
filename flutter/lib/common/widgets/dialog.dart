@@ -819,11 +819,13 @@ void wrongPasswordDialog(SessionID sessionId,
 }
 
 void enterPasswordDialog(
-    SessionID sessionId, OverlayDialogManager dialogManager) async {
+    SessionID sessionId, OverlayDialogManager dialogManager,
+    {String tip = ''}) async {
   await _connectDialog(
     sessionId,
     dialogManager,
     passwordController: TextEditingController(),
+    passwordTip: tip,
   );
 }
 
@@ -866,6 +868,7 @@ _connectDialog(
   TextEditingController? passwordController,
   String? osAccountDescTip,
   bool canRememberAccount = true,
+  String passwordTip = '',
 }) async {
   final errUsername = ''.obs;
   var rememberPassword = false;
@@ -1007,6 +1010,16 @@ _connectDialog(
       }
       return Column(
         children: [
+          // Farooq Remote 1.1.8: why easy access was not used (owner 2 Nov 2026: a clear message)
+          if (passwordTip.isNotEmpty)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                translate(passwordTip),
+                softWrap: true,
+                style: TextStyle(fontSize: 13, color: Colors.orange.shade800),
+              ),
+            ).marginOnly(bottom: 10),
           descWidget(translate('verify_rustdesk_password_tip')),
           PasswordWidget(
             controller: passwordController,

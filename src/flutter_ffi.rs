@@ -1103,7 +1103,8 @@ pub fn main_get_license() -> String {
 }
 
 pub fn main_get_version() -> String {
-    get_version()
+    // Farooq Remote 1.1.8: About shows the product's version (the RustDesk core's own is "fr-base-version")
+    crate::farooq::FR_VERSION.to_owned()
 }
 
 pub fn main_get_fav() -> Vec<String> {
@@ -2844,6 +2845,15 @@ pub fn main_get_common(key: String) -> String {
         return ui_interface::is_permanent_password_set().to_string();
     } else if key == "local-permanent-password-set" {
         return ui_interface::is_local_permanent_password_set().to_string();
+    } else if key == "fr-version" {
+        // Farooq Remote 1.1.8: this app's version (update card and question)
+        return crate::farooq::FR_VERSION.to_owned();
+    } else if key == "fr-base-version" {
+        // Farooq Remote 1.1.8: the RustDesk version this build is based on (About)
+        return crate::VERSION.to_owned();
+    } else if key == "fr-rustdesk-installed" {
+        // Farooq Remote 1.1.8: RustDesk itself is installed here (home page card, crate::farooq::rustdesk_installed)
+        return crate::farooq::rustdesk_installed().to_string();
     } else {
         if key.starts_with("download-data-") {
             let id = key.replace("download-data-", "");

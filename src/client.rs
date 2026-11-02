@@ -1776,6 +1776,9 @@ pub struct LoginConfigHandler {
     /// Farooq Remote 1.1.7: when an easy-access ticket was sent and no answer has come yet (src/client/io_loop.rs: a refusal
     /// falls back to the saved password; no answer in 15 s brings the password question).
     pub fr_easy_sent: Option<std::time::Instant>,
+    /// Farooq Remote 1.1.8: why easy access was not used on this connection (a crate::farooq::WHY_ key, or ""), for the
+    /// password question.
+    pub fr_easy_why: &'static str,
 }
 
 impl Deref for LoginConfigHandler {
@@ -3583,14 +3586,27 @@ pub async fn handle_hash(
     // 1.1.7: tried before a saved password too (an old saved password no longer blocks it; owner 2 Nov 2026: «even easy
     // access it ask you password»); if the target refuses the ticket, the saved password is sent instead
     // (src/client/io_loop.rs), and only then the password question appears.
+    // 1.1.8: when easy access is not used, the reason goes to the password question (crate::farooq::WHY_*), but only
+    // for a computer easy access has reached before, so other people's computers show the usual question.
     let target_pk = lc.write().unwrap().fr_easy_pk.take();
     let target_pk = target_pk.filter(|pk| pk.len() == 32 && peer.is_secured());
+    let mut fr_why: &'static str = "";
+    if !fr_explicit_password && target_pk.is_none() && !peer.is_secured() {
+        fr_why = crate::farooq::easy_why_insecure();
+    }
     if let (false, Some(target_pk)) = (fr_explicit_password, target_pk) {
         let id = lc.read().unwrap().id.clone();
         if !password.is_empty() {
             log::info!("easy access: tried before the saved password for {}", id);
         }
-        if let Some(ticket) = crate::farooq::easy_ticket(&id, &target_pk).await {
+        let ticket = match crate::farooq::easy_ticket(&id, &target_pk).await {
+            Ok(ticket) => Some(ticket),
+            Err(why) => {
+                fr_why = why;
+                None
+            }
+        };
+        if let Some(ticket) = ticket {
             let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
             let (os_username, os_password) = if is_terminal {
                 ("".to_owned(), "".to_owned())
@@ -3614,9 +3630,14 @@ pub async fn handle_hash(
         }
     }
 
+    if lc.read().unwrap().get_option(crate::farooq::PEER_EASY_OK) != "Y" {
+        fr_why = "";
+    }
+    lc.write().unwrap().fr_easy_why = fr_why;
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
-        interface.msgbox("input-password", "Password Required", "", "");
+        // (Farooq Remote 1.1.8: with the reason easy access was not used, if any)
+        interface.msgbox("input-password", "Password Required", fr_why, "");
         Vec::new()
     } else {
         let mut hasher = Sha256::new();
@@ -3875,10 +3896,11 @@ pub async fn confirm_insecure_connection(
     interface: &impl Interface,
     receiver: &mut UnboundedReceiver<Data>,
 ) -> bool {
+    // Farooq Remote 1.1.8: our own text names the usual cause (another program with the same ID on that computer)
     interface.msgbox(
         "insecure-connection-nocancel-hasclose",
         "Insecure Connection",
-        "conn-e2ee-unavailable-tip",
+        "fr-conn-e2ee-unavailable-tip",
         "",
     );
     while let Some(data) = receiver.recv().await {

@@ -29,6 +29,7 @@ by the workflow below.
 | `src/farooq.rs` (easy_*), `src/client.rs` (`handle_hash`), `src/server/connection.rs` (login), `src/hbbs_http/sync.rs` (heartbeat), `desktop_setting_page.dart`, `src/lang/{en,ur,ar}.rs`, workflow step for `message.proto` | 1.1.5: easy access — the owner's own account connects without a password (see «1.1.5» below). |
 | `src/farooq.rs` (`easy_post`, `ACCEPT_SERVER_STRATEGY`), `src/client.rs` (`fr_easy_pk`), `src/client/io_loop.rs`, `src/server/connection.rs`, `src/hbbs_http/sync.rs`, `src/hbbs_http/http_client.rs` + `src/hbbs_http.rs` (`create_http_client_async_no_redirect`), `src/lang/{en,ur,ar}.rs` | 1.1.6: easy access after a security review — strict https, the ticket tied to the encrypted session, wrong tickets counted, heartbeat «strategy» ignored (see «1.1.6» below). |
 | `src/farooq.rs` (`easy_control_permissions`), `src/server/connection.rs` (`fr_apply_easy_permissions`, the ticket checked once before the session-type checks), `src/client.rs` (`fr_easy_sent`, easy access before a saved password), `src/client/io_loop.rs` (saved-password fallback, 15 s), `desktop_setting_page.dart` (`_frEasyPerms`), `src/lang/{en,ur,ar}.rs` | 1.1.7: what easy access may do (Full Access / Screen Share / Custom), easy access tried before a saved password (see «1.1.7» below). |
+| `src/farooq.rs` (`FR_VERSION`, update check, `peer_version_note`, `WHY_*`, `rustdesk_installed`), `src/common.rs`, `src/ui_interface.rs`, `src/flutter_ffi.rs`, `src/platform/windows.rs`, `src/hbbs_http/{sync,http_client}.rs`, `src/server/connection.rs`, `src/client.rs`, `src/client/io_loop.rs`, `src/lang.rs`, `src/lang/{en,ur,ar}.rs`, `flutter/lib/common.dart`, `desktop_home_page.dart`, `desktop_setting_page.dart`, `common/widgets/dialog.dart`, `models/model.dart`, workflow step «one version number» | 1.1.8: one version number everywhere, the app looks for a newer version on the site and asks, clear messages when versions differ or easy access is not used (see «1.1.8» below). |
 | `.github/workflows/farooqremote-windows.yml` (new) | Windows x64 build (manual trigger). |
 
 Everything else is upstream, byte for byte. Upstream workflows are left in place but
@@ -185,6 +186,46 @@ A review of 1.1.5 (before it was given to anyone) found ways around easy access;
 * Clearer log lines: «no ticket … (not offered by the account server)», «tried before the saved password», and on the
   computer being reached which check refused a ticket (ticket, account, computer, key).
 * Server: unchanged (accounts 2.7-10).
+
+## 1.1.8 — one version number, update check, clear messages (2 Nov 2026)
+
+* Owner, 2 Nov 16:26 (after 1.1.7 worked «after lot of effort»): «if your App build does not match of last version
+  update it should give clear message and if it is old version it should detect online if new version available ask
+  user to update and ver number in different in about in file name ?? onsite??» — About showed 1.4.9 (RustDesk's own
+  number), the file and the site 1.1.7. His screenshots also showed «Insecure connection» and the password question when
+  connecting to Home 2, where the old RustDesk is still installed (see 1.1.7).
+* **One version number.** `crate::farooq::FR_VERSION` is the only place it is written. About shows it (and «Based on
+  RustDesk 1.4.9» in the box), Windows «Apps» shows it (`DisplayVersion`/`Version`/`VersionMajor…` in `install_me` and
+  `update_me`), the account server's device list gets «1.1.8 (1.4.9)», the other computer gets it in
+  `PeerInfo.platform_additions` (`fr_version`). The workflow step «one version number» reads it from `src/farooq.rs`,
+  names the file with it, sets the exe's file version (`flutter/pubspec.yaml` `version: <v>+67`) and stops when a
+  release tag is not exactly `v<version>`. The RustDesk core keeps `crate::VERSION` = 1.4.9, because the protocol
+  compares it with other computers (features are switched by it).
+* **Update check.** The main window reads `https://www.farooqmughal.net/farooqremote/version.json` when it starts and
+  every 12 hours (`start_update_check`, through upstream's `check_software_update`, which is off for custom clients):
+  https only, certificate checked, redirects only within www.farooqmughal.net / farooqmughal.net (at most 3,
+  `create_http_client_async_same_site`), 15 s, at most 4 KB, and only a version «a.b.c» is taken from it. A newer one
+  shows a card on the home page («A new version is available», Download) and asks once per version («Later» /
+  «Download»). «Download» always opens our own download page in the app's language (never an address from the
+  network). The site generator writes `version.json` together with the download pages, so the app announces a version
+  exactly when the site offers it. «Check for software update on startup» (Settings → General) is now shown and turns
+  it off.
+* **Different versions.** After the login, when the other computer runs another Farooq Remote version (or tells none:
+  1.1.7 and older, or another program), a note says both numbers and which computer to update, with a button to the
+  download page — once per pair of versions per computer (peer option `fr-version-noted`).
+* **Why easy access was not used.** The password question now carries the reason (`crate::farooq::WHY_*`): this
+  computer is not signed in / the other computer could not be verified (insecure connection) / the account server
+  could not be reached / the other computer does not offer easy access (sign in there and tick it) / it refused the
+  ticket / it did not answer in 15 s. The reasons found before a ticket are shown only for a computer that easy access
+  has reached before (peer option `fr-easy-ok`, set at an easy-access login), so connections to other people's computers
+  show the usual question; the reasons after a ticket are always shown.
+* **Insecure connection**: our own text (`fr-conn-e2ee-unavailable-tip`) names the usual cause — another remote-desktop
+  program with the same ID on that computer (for example an old RustDesk) — and what to do.
+* **RustDesk installed here**: when RustDesk itself is installed on the computer (uninstall key or service «RustDesk»),
+  the home page says that with our server both programs have the same ID and how to uninstall it (closable for good:
+  local option `fr-show-rustdesk-card` = `N`).
+* `src/lang.rs`: texts of our own keys (`fr-…`) keep the word RustDesk (upstream replaces it with the app name).
+* Server: unchanged (accounts 2.7-10). Site: `farooqremote/version.json` + pages for 1.1.8.
 
 ## Never
 

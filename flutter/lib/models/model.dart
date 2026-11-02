@@ -919,7 +919,9 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'input-2fa') {
       enter2FaDialog(sessionId, dialogManager);
     } else if (type == 'input-password') {
-      enterPasswordDialog(sessionId, dialogManager);
+      // Farooq Remote 1.1.8: the text, when given, says why easy access was not used (crate::farooq::WHY_*)
+      enterPasswordDialog(sessionId, dialogManager,
+          tip: text is String ? text : '');
     } else if (type == 'session-login' || type == 'session-re-login') {
       enterUserLoginDialog(sessionId, dialogManager, 'login_linux_tip', true);
     } else if (type == 'session-login-password') {

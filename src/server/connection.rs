@@ -1811,6 +1811,13 @@ impl Connection {
             platform_additions.insert("support_view_camera".into(), json!(true));
         }
 
+        // Farooq Remote 1.1.8: tell the other computer which Farooq Remote this is (crate::farooq::peer_version_note)
+        #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+        platform_additions.insert(
+            crate::farooq::PEER_INFO_VERSION_KEY.into(),
+            json!(crate::farooq::FR_VERSION),
+        );
+
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         if !platform_additions.is_empty() {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());

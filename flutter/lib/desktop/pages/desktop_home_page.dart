@@ -50,6 +50,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   var watchIsCanRecordAudio = false;
   Timer? _updateTimer;
   bool isCardClosed = false;
+  // Farooq Remote 1.1.8: RustDesk itself installed here (checked once), and the local option that hides the card
+  static const String _kFrShowRustDeskCard = 'fr-show-rustdesk-card';
+  late final bool _frRustDeskInstalled =
+      isWindows && bind.mainGetCommonSync(key: 'fr-rustdesk-installed') == 'true';
 
   final RxBool _editHover = false.obs;
   final RxBool _block = false.obs;
@@ -430,6 +434,29 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
+    // Farooq Remote 1.1.8: a newer version on www.farooqmughal.net (crate::farooq::start_update_check, checkUpdate in
+    // common.dart); «Download» opens the download page of the site in the app's language
+    if (bind.isCustomClient() && updateUrl.isNotEmpty && !isCardClosed) {
+      final newVersion = bind.mainGetNewVersion();
+      if (newVersion.isNotEmpty) {
+        return buildInstallCard(
+            "fr-update-title",
+            translate("fr-update-tip")
+                .replaceAll("{new}", newVersion)
+                .replaceAll("{mine}", frAppVersion),
+            "Download", () async {
+          await launchUrl(Uri.parse(frDownloadPage()));
+        }, closeButton: true);
+      }
+    }
+    // Farooq Remote 1.1.8: RustDesk itself is installed on this computer — with our server it has the same ID, and
+    // connections reach either program (owner's home-02, 2 Nov 2026). Said until the card is closed.
+    if (_frRustDeskInstalled &&
+        bind.mainGetLocalOption(key: _kFrShowRustDeskCard) != 'N') {
+      return buildInstallCard("fr-rustdesk-installed-title",
+          "fr-rustdesk-installed-tip", "", () async {},
+          closeButton: true, closeOption: _kFrShowRustDeskCard);
+    }
     if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&

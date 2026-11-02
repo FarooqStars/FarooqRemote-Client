@@ -129,7 +129,8 @@ async fn start_hbbs_sync_async() {
                 let need_upload = (!info_uploaded.uploaded || info_uploaded.username.as_ref() != Some(&sys_username)) &&
                     info_uploaded.last_uploaded.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true);
                 if need_upload {
-                    v["version"] = json!(crate::VERSION);
+                    // Farooq Remote 1.1.8: the account server's device list shows the product's version too
+                    v["version"] = json!(format!("{} ({})", crate::farooq::FR_VERSION, crate::VERSION));
                     v["id"] = json!(id);
                     v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
                     let ab_name = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NAME);

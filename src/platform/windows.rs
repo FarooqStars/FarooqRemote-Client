@@ -1565,7 +1565,8 @@ pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> Res
     let mut version_major = "0";
     let mut version_minor = "0";
     let mut version_build = "0";
-    let versions: Vec<&str> = crate::VERSION.split(".").collect();
+    // Farooq Remote 1.1.8: Windows «Apps» shows the product's version (crate::farooq::FR_VERSION)
+    let versions: Vec<&str> = crate::farooq::FR_VERSION.split(".").collect();
     if versions.len() > 0 {
         version_major = versions[0];
     }
@@ -1731,7 +1732,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {sleep}
     ",
         display_icon = get_custom_icon(&path, &cur_exe).unwrap_or(exe.to_string()),
-        version = crate::VERSION.replace("-", "."),
+        version = crate::farooq::FR_VERSION.replace("-", "."),
         build_date = crate::BUILD_DATE,
         after_install = get_after_install(
             &exe,
@@ -3284,7 +3285,8 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     let mut version_major = "0";
     let mut version_minor = "0";
     let mut version_build = "0";
-    let versions: Vec<&str> = crate::VERSION.split(".").collect();
+    // Farooq Remote 1.1.8: Windows «Apps» shows the product's version (crate::farooq::FR_VERSION)
+    let versions: Vec<&str> = crate::farooq::FR_VERSION.split(".").collect();
     if versions.len() > 0 {
         version_major = versions[0];
     }
@@ -3294,7 +3296,7 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     if versions.len() > 2 {
         version_build = versions[2];
     }
-    let version = crate::VERSION.replace("-", ".");
+    let version = crate::farooq::FR_VERSION.replace("-", ".");
     let size = get_directory_size_kb(&path);
     let build_date = crate::BUILD_DATE;
     // Use the icon in the previous installation directory if possible.

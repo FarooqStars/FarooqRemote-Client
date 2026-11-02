@@ -18,17 +18,32 @@
 //     the field falls back to these defaults again.
 
 use hbb_common::{
+    bail,
     config::{keys, Config, LocalConfig, APP_NAME, DEFAULT_SETTINGS},
     log,
     protobuf::Enum,
     rendezvous_proto::{control_permissions::Permission, ControlPermissions},
     tls::TlsType,
+    tokio, ResultType,
 };
-use std::sync::Once;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex, Once,
+    },
+    time::Duration,
+};
 
 /// Product name. No spaces: it is also used for the Windows service name,
 /// data folders and the tray tooltip.
 pub const APP_DISPLAY_NAME: &str = "FarooqRemote";
+
+/// Farooq Remote 1.1.8 (owner 2 Nov 2026: «ver number is different in about, in file name, on site»): the product's own
+/// version, the only place it is written. The RustDesk core keeps crate::VERSION (1.4.9) because the protocol compares
+/// it with other computers; everything a person sees shows this number instead: About, Windows «Apps» (DisplayVersion),
+/// the exe's file version, the installer's file name and the release tag (the Windows workflow reads it from this line
+/// and stops when a release tag does not match), and the site (version.json and the download pages).
+pub const FR_VERSION: &str = "1.1.8";
 
 /// Farooq Remote public ID server (hbbs) — the company domain (1.1.0, owner 1 Nov 2026:
 /// «we will use now farooqmughal.net for everything»); remote.farooqmughal.net → the Oracle VM.
@@ -162,12 +177,14 @@ fn easy_api_url(path: &str) -> Option<String> {
 /// A strict JSON POST for easy access: https only (see `easy_api_url`), the certificate is always checked (rustls with
 /// the system's roots first, then the system's own TLS — never «accept invalid certificates»), no fallback through the
 /// ID server, no redirect followed, one time limit, and only a 2xx answer from that very address counts.
+/// 1.1.8: the error says what went wrong — `Some(http status)` when the server answered with an error, `None` when it
+/// could not be reached or the answer was not readable.
 async fn easy_post(
     url: &str,
     body: &serde_json::Value,
     bearer: Option<&str>,
-) -> Option<serde_json::Value> {
-    let want = reqwest::Url::parse(url).ok()?;
+) -> Result<serde_json::Value, Option<u16>> {
+    let want = reqwest::Url::parse(url).map_err(|_| None)?;
     let body = body.to_string();
     let limit = std::time::Duration::from_millis(EASY_HTTP_TIMEOUT_MS);
     for tls in [TlsType::Rustls, TlsType::NativeTls] {
@@ -183,51 +200,81 @@ async fn easy_post(
             Ok(resp) => {
                 if !resp.status().is_success() || resp.url() != &want {
                     log::warn!("easy access: the account server answered {}", resp.status());
-                    return None;
+                    return Err(Some(resp.status().as_u16()));
                 }
-                let text = resp.text().await.ok()?;
-                return serde_json::from_str(&text).ok();
+                let text = resp.text().await.map_err(|_| None)?;
+                return serde_json::from_str(&text).map_err(|_| None);
             }
             Err(e) => {
                 log::warn!("easy access: request failed ({:?}): {}", tls, e);
                 if e.is_timeout() {
-                    return None;
+                    return Err(None);
                 }
             }
         }
     }
-    None
+    Err(None)
+}
+
+/// Farooq Remote 1.1.8 (owner 2 Nov 2026: «even easy access it ask you password» — he could not see why): when easy
+/// access was not used, the password question says why, in his language (keys of src/lang/*.rs). The reasons found before
+/// a ticket was sent are shown only for a computer that easy access has reached before (peer option `PEER_EASY_OK`), so
+/// a connection to someone else's computer shows the usual question; the reasons after a ticket was sent are always
+/// shown (the ticket proves that computer offers easy access to this account).
+pub const WHY_SIGNED_OUT: &str = "fr-easy-why-signed-out";
+pub const WHY_INSECURE: &str = "fr-easy-why-insecure";
+pub const WHY_SERVER: &str = "fr-easy-why-server";
+pub const WHY_NOT_OFFERED: &str = "fr-easy-why-not-offered";
+pub const WHY_REFUSED: &str = "fr-easy-why-refused";
+pub const WHY_NO_ANSWER: &str = "fr-easy-why-no-answer";
+/// Peer option (stored with that computer's settings on the controller): easy access has let this computer in before.
+pub const PEER_EASY_OK: &str = "fr-easy-ok";
+
+/// Why no ticket was asked for on a connection that is not end-to-end encrypted.
+pub fn easy_why_insecure() -> &'static str {
+    if LocalConfig::get_option("access_token").is_empty() {
+        WHY_SIGNED_OUT
+    } else {
+        WHY_INSECURE
+    }
 }
 
 /// Controller: a one-time ticket to reach `peer_id` without its password — only when signed in and when that computer
-/// allows easy access and is signed in to the same account (the account server decides); `None` otherwise, and the
-/// password is asked as before. `target_pk` is the other computer's key, checked through the ID server, of this
-/// end-to-end encrypted connection; the ticket is valid only for that key.
-pub async fn easy_ticket(peer_id: &str, target_pk: &[u8]) -> Option<String> {
+/// allows easy access and is signed in to the same account (the account server decides); otherwise the reason (one of
+/// the `WHY_` keys) and the password is asked as before. `target_pk` is the other computer's key, checked through the ID
+/// server, of this end-to-end encrypted connection; the ticket is valid only for that key.
+pub async fn easy_ticket(peer_id: &str, target_pk: &[u8]) -> Result<String, &'static str> {
     let token = LocalConfig::get_option("access_token");
-    if token.is_empty() || peer_id.is_empty() || target_pk.len() != 32 {
-        return None;
+    if token.is_empty() {
+        return Err(WHY_SIGNED_OUT);
     }
-    let url = easy_api_url("/api/fr/easy/ticket")?;
+    if peer_id.is_empty() || target_pk.len() != 32 {
+        return Err(WHY_INSECURE);
+    }
+    let url = easy_api_url("/api/fr/easy/ticket").ok_or(WHY_SERVER)?;
     let body = serde_json::json!({
         "id": peer_id,
         "from": Config::get_id(),
         "pk": crate::encode64(target_pk),
     });
-    let v = easy_post(&url, &body, Some(token.as_str())).await?;
+    let v = match easy_post(&url, &body, Some(token.as_str())).await {
+        Ok(v) => v,
+        Err(Some(401)) => return Err(WHY_SIGNED_OUT),
+        Err(_) => return Err(WHY_SERVER),
+    };
     if v["easy"].as_bool() != Some(true) {
         log::info!(
             "easy access: no ticket for {} (not offered by the account server)",
             peer_id
         );
-        return None;
+        return Err(WHY_NOT_OFFERED);
     }
-    let ticket = v["ticket"].as_str()?.to_owned();
+    let ticket = v["ticket"].as_str().unwrap_or_default().to_owned();
     if ticket.len() != 64 || !ticket.chars().all(|c| c.is_ascii_hexdigit()) {
-        return None;
+        return Err(WHY_SERVER);
     }
     log::info!("easy access: ticket for {}", peer_id);
-    Some(ticket)
+    Ok(ticket)
 }
 
 /// Computer being reached: is `ticket` from this computer's owner, presented by the computer `from_id`, for a session
@@ -246,7 +293,7 @@ pub async fn easy_check(ticket: &str, from_id: &str) -> bool {
     let owner = Config::get_option(OPTION_EASY_OWNER).trim().to_lowercase();
     let my_pk = crate::encode64(Config::get_key_pair().1);
     let body = serde_json::json!({ "ticket": ticket, "id": Config::get_id() });
-    let Some(v) = easy_post(&url, &body, None).await else {
+    let Ok(v) = easy_post(&url, &body, None).await else {
         log::warn!("easy access: no answer from the account server");
         return false;
     };
@@ -271,6 +318,217 @@ pub async fn easy_check(ticket: &str, from_id: &str) -> bool {
         );
     }
     ok
+}
+
+/// "1.2.3" → (1, 2, 3); anything else (letters, signs, spaces, more or fewer parts) → None.
+pub fn parse_version(v: &str) -> Option<(u32, u32, u32)> {
+    let parts: Vec<&str> = v.split('.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let mut n = [0u32; 3];
+    for (i, p) in parts.iter().enumerate() {
+        if p.is_empty() || p.len() > 4 || !p.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        n[i] = p.parse().ok()?;
+    }
+    Some((n[0], n[1], n[2]))
+}
+
+/// Is `a` a newer version than `b`? (false when either is not a version)
+pub fn is_newer(a: &str, b: &str) -> bool {
+    match (parse_version(a), parse_version(b)) {
+        (Some(a), Some(b)) => a > b,
+        _ => false,
+    }
+}
+
+/// The language the app shows ("en", "ur", "ar"; every other language is "en" here): read through the translation
+/// tables, so it follows Settings → General → Language exactly like the texts do.
+fn ui_lang() -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let l = crate::lang::translate("fr-lang-code".to_owned());
+        if l == "ur" || l == "ar" {
+            return l;
+        }
+    }
+    "en".to_owned()
+}
+
+/// The download page of the site in the app's language (always this site: the address never comes from the network).
+pub fn download_page() -> String {
+    match ui_lang().as_str() {
+        "ur" => "https://www.farooqmughal.net/ur/farooqremote/".to_owned(),
+        "ar" => "https://www.farooqmughal.net/ar/farooqremote/".to_owned(),
+        _ => "https://www.farooqmughal.net/farooqremote/".to_owned(),
+    }
+}
+
+/// Farooq Remote 1.1.8 (owner 2 Nov 2026: «if it is old version it should detect online if new version available ask
+/// user to update»): the main window asks the site for the newest version when it starts and every 12 hours. The site
+/// generator writes version.json together with the download pages, so the app announces a version exactly when the
+/// site offers it. Only the version number is read from the answer; the «Download» button always opens our own page
+/// (`download_page`), so a false answer could at most show a needless card. Off when the user unticks «Check for
+/// software update on startup» (Settings → General).
+const UPDATE_INFO_URL: &str = "https://www.farooqmughal.net/farooqremote/version.json";
+const UPDATE_SITE_HOSTS: &[&str] = &["www.farooqmughal.net", "farooqmughal.net"];
+const UPDATE_CHECK_EVERY: Duration = Duration::from_secs(12 * 3600);
+const UPDATE_INFO_MAX_BYTES: usize = 4096;
+static UPDATE_CHECK_STARTED: AtomicBool = AtomicBool::new(false);
+
+lazy_static::lazy_static! {
+    static ref NEW_VERSION: Mutex<String> = Default::default();
+}
+
+/// The newer version the site offers, or "" (none, or not known yet).
+pub fn new_version() -> String {
+    NEW_VERSION.lock().unwrap().clone()
+}
+
+/// Started by the main window (crate::common::check_software_update); a second call only repeats the known answer.
+pub fn start_update_check() {
+    if UPDATE_CHECK_STARTED.swap(true, Ordering::SeqCst) {
+        push_update_event();
+        return;
+    }
+    std::thread::spawn(|| loop {
+        match fetch_newest_version() {
+            Ok(v) => {
+                let newer = is_newer(&v, FR_VERSION);
+                log::info!(
+                    "update check: the site offers {}, this is {}{}",
+                    v,
+                    FR_VERSION,
+                    if newer { " - a newer version" } else { "" }
+                );
+                *NEW_VERSION.lock().unwrap() = if newer { v } else { String::new() };
+                push_update_event();
+            }
+            Err(e) => log::info!("update check: {}", e),
+        }
+        std::thread::sleep(UPDATE_CHECK_EVERY);
+    });
+}
+
+/// Tells the main window (flutter/lib/common.dart checkUpdate) about a newer version: the home page shows a card and the
+/// app asks once per version.
+fn push_update_event() {
+    #[cfg(feature = "flutter")]
+    {
+        if new_version().is_empty() {
+            return;
+        }
+        let data = serde_json::json!({
+            "name": "check_software_update_finish",
+            "url": download_page(),
+        });
+        let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data.to_string());
+    }
+}
+
+/// Reads the newest version from the site: https only, the certificate always checked, redirects only within the site
+/// (at most 3), a time limit and a small answer, and the version must look like "1.2.3".
+#[tokio::main(flavor = "current_thread")]
+async fn fetch_newest_version() -> ResultType<String> {
+    let limit = Duration::from_secs(15);
+    let mut last = String::new();
+    for tls in [TlsType::Rustls, TlsType::NativeTls] {
+        let req = crate::hbbs_http::create_http_client_async_same_site(tls, UPDATE_SITE_HOSTS, 3)
+            .get(UPDATE_INFO_URL)
+            .timeout(limit);
+        match req.send().await {
+            Ok(mut resp) => {
+                let host_ok = resp.url().scheme() == "https"
+                    && resp
+                        .url()
+                        .host_str()
+                        .map(|h| UPDATE_SITE_HOSTS.contains(&h))
+                        .unwrap_or(false);
+                if !resp.status().is_success() || !host_ok {
+                    bail!("the site answered {} ({})", resp.status(), resp.url());
+                }
+                let mut body: Vec<u8> = Vec::new();
+                while let Some(chunk) = resp.chunk().await? {
+                    body.extend_from_slice(&chunk);
+                    if body.len() > UPDATE_INFO_MAX_BYTES {
+                        bail!("the answer is too long");
+                    }
+                }
+                let v: serde_json::Value = serde_json::from_slice(&body)?;
+                let ver = v["version"].as_str().unwrap_or_default().trim().to_owned();
+                if parse_version(&ver).is_none() {
+                    bail!("no version in the answer");
+                }
+                return Ok(ver);
+            }
+            Err(e) => {
+                last = format!("{:?}: {}", tls, e);
+                if e.is_timeout() {
+                    break;
+                }
+            }
+        }
+    }
+    bail!("the site could not be reached ({})", last)
+}
+
+/// Farooq Remote 1.1.8 (owner 2 Nov 2026: «if your App build does not match … it should give clear message»): the
+/// computer being reached tells its version in PeerInfo.platform_additions (src/server/connection.rs); 1.1.7 and older,
+/// and other programs, tell none.
+pub const PEER_INFO_VERSION_KEY: &str = "fr_version";
+/// Peer option: the version pair already shown for that computer ("its|mine"), so the note comes once per change.
+pub const PEER_VERSION_NOTED: &str = "fr-version-noted";
+
+/// The other computer's Farooq Remote version from its PeerInfo.platform_additions ("" when it tells none).
+pub fn peer_fr_version(platform_additions: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(platform_additions)
+        .ok()
+        .and_then(|v| v[PEER_INFO_VERSION_KEY].as_str().map(|s| s.trim().to_owned()))
+        .filter(|s| parse_version(s).is_some())
+        .unwrap_or_default()
+}
+
+/// A note in the app's language when the other computer runs another version: (title key, text, link to the download
+/// page); None when both are the same.
+pub fn peer_version_note(peer_version: &str) -> Option<(&'static str, String, String)> {
+    let key = if peer_version.is_empty() {
+        "fr-peer-version-unknown"
+    } else if is_newer(FR_VERSION, peer_version) {
+        "fr-peer-version-older"
+    } else if is_newer(peer_version, FR_VERSION) {
+        "fr-peer-version-newer"
+    } else {
+        return None;
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let text = crate::lang::translate(key.to_owned());
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let text = key.to_owned();
+    let text = text
+        .replace("{peer}", peer_version)
+        .replace("{mine}", FR_VERSION);
+    Some(("fr-peer-version-title", text, download_page()))
+}
+
+/// Farooq Remote 1.1.8: RustDesk itself is installed on this computer. When it is set to the Farooq Remote server it has
+/// the same ID (both take it from the computer), and connections reach either program at random — the owner's home-02
+/// (2 Nov 2026: «Insecure connection», endless «connecting», a password question). The home page says so, once.
+pub fn rustdesk_installed() -> bool {
+    #[cfg(windows)]
+    {
+        use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        return hklm
+            .open_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RustDesk")
+            .is_ok()
+            || hklm
+                .open_subkey("SYSTEM\\CurrentControlSet\\Services\\RustDesk")
+                .is_ok();
+    }
+    #[cfg(not(windows))]
+    false
 }
 
 static APPLIED: Once = Once::new();
