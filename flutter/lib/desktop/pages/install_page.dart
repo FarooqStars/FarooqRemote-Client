@@ -277,8 +277,9 @@ class _InstallPageBodyState extends State<_InstallPageBody>
 
   /// true = keep, false = delete, null = cancel
   Future<bool?> _frAskKeepSettings() {
+    // this.context: the file imports package:path, whose top-level `context` would be taken otherwise
     return showDialog<bool>(
-      context: context,
+      context: this.context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: Text(translate('fr-keep-settings-title')),
