@@ -19,7 +19,7 @@
 
 use hbb_common::{
     bail,
-    config::{keys, Config, LocalConfig, APP_NAME, DEFAULT_SETTINGS},
+    config::{keys, Config, LocalConfig, PeerConfig, APP_NAME, DEFAULT_DISPLAY_SETTINGS, DEFAULT_SETTINGS},
     log,
     protobuf::Enum,
     rendezvous_proto::{control_permissions::Permission, ControlPermissions},
@@ -43,18 +43,21 @@ pub const APP_DISPLAY_NAME: &str = "FarooqRemote";
 /// it with other computers; everything a person sees shows this number instead: About, Windows «Apps» (DisplayVersion),
 /// the exe's file version, the installer's file name and the release tag (the Windows workflow reads it from this line
 /// and stops when a release tag does not match), and the site (version.json and the download pages).
-pub const FR_VERSION: &str = "1.1.9";
+pub const FR_VERSION: &str = "1.1.10";
 
 /// Farooq Remote public ID server (hbbs) — the company domain (1.1.0, owner 1 Nov 2026:
-/// «we will use now farooqmughal.net for everything»); remote.farooqmughal.net → the Oracle VM.
+/// «we will use now farooqmughal.net for everything»); remote.farooqmughal.net → the Hostinger VPS 189.31.34.185
+/// (17 Nov 2026; before: the Oracle VM).
 pub const ID_SERVER: &str = "remote.farooqmughal.net";
 /// Relay server (hbbr).
 pub const RELAY_SERVER: &str = "remote.farooqmughal.net:21117";
 /// Account server (user name + password, address book, my devices) — 1.1.0, Phase 5.
 /// Served by nginx on the same VM (lejianwen/rustdesk-api, MIT); https only.
 pub const API_SERVER: &str = "https://remote.farooqmughal.net";
-/// Public key of the Farooq Remote ID server (data/id_ed25519.pub on the VM).
-pub const SERVER_PUBLIC_KEY: &str = "11rU8HpBVbadu59plPSdMpFvkaJ2amnfcB+rJlZ2EWs=";
+/// Public key of the Farooq Remote ID server (/opt/farooqremote/data/id_ed25519.pub on the server).
+/// 1.1.10 (17 Nov 2026): the Oracle VM is gone (account terminated); the server now runs on the Hostinger VPS with a NEW
+/// key pair (the owner chose to keep it and has already typed it on his computers). Old key: 11rU8HpB…EWs=.
+pub const SERVER_PUBLIC_KEY: &str = "8DxzoeIxMSK5FctNSKSTWsGUHZ3y6ZXG3lj1jWUzcfk=";
 
 pub const WEBSITE_URL: &str = "https://www.farooqmughal.net";
 pub const DOWNLOAD_URL: &str = "https://www.farooqmughal.net/farooqremote";
@@ -650,6 +653,29 @@ pub fn resend_key_once_per_version() {
     }
 }
 
+/// Farooq Remote 1.1.10: the image quality every connection starts with (upstream: «balanced»).
+pub const IMAGE_QUALITY: &str = "best";
+
+/// Farooq Remote 1.1.10: computers that were already connected keep the quality saved for them — upstream saved «balanced»
+/// for each of them on the first connection. Once (the first start of 1.1.10) every saved «balanced» becomes «best»;
+/// «low», «custom» or «best» chosen by a person stay as they are.
+pub fn upgrade_image_quality_once() {
+    const DONE: &str = "fr-image-quality-best";
+    if LocalConfig::get_option(DONE) == "Y" {
+        return;
+    }
+    let mut changed = 0;
+    for (id, _, mut peer) in PeerConfig::peers(None) {
+        if peer.image_quality == "balanced" {
+            peer.image_quality = IMAGE_QUALITY.to_owned();
+            peer.store(&id);
+            changed += 1;
+        }
+    }
+    LocalConfig::set_option(DONE.to_owned(), "Y".to_owned());
+    log::info!("image quality: {} saved computer(s) moved from balanced to {}", changed, IMAGE_QUALITY);
+}
+
 static APPLIED: Once = Once::new();
 
 /// Apply the branding. Safe to call more than once; runs only the first time.
@@ -667,6 +693,14 @@ pub fn apply() {
         );
         defaults.insert(keys::OPTION_KEY.to_owned(), SERVER_PUBLIC_KEY.to_owned());
         defaults.insert(keys::OPTION_API_SERVER.to_owned(), API_SERVER.to_owned());
+        drop(defaults);
+        // Farooq Remote 1.1.10 (owner 17 Nov 2026: «the picture stays blurry the whole time, TeamViewer is sharp after a few
+        // seconds»): upstream's default image quality is «balanced» (a low bit rate). Farooq Remote starts every new
+        // connection on «best»; a person can still choose another quality in the toolbar (that choice is kept per computer).
+        DEFAULT_DISPLAY_SETTINGS
+            .write()
+            .unwrap()
+            .insert(keys::OPTION_IMAGE_QUALITY.to_owned(), IMAGE_QUALITY.to_owned());
         log::info!(
             "{} branding applied: id server {}, relay {}, account server {}",
             APP_DISPLAY_NAME,

@@ -35,7 +35,7 @@ env:
   # reads it from there for the file name, the exe's file version and the release tag check.
   # Server facts (must match src/farooq.rs)
   FR_ID_SERVER: "remote.farooqmughal.net"
-  FR_PUB_KEY: "11rU8HpBVbadu59plPSdMpFvkaJ2amnfcB+rJlZ2EWs="
+  FR_PUB_KEY: "8DxzoeIxMSK5FctNSKSTWsGUHZ3y6ZXG3lj1jWUzcfk="   # 1.1.10: Hostinger VPS key (17 Nov 2026)
 
 jobs:
   generate-bridge:
